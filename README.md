@@ -136,7 +136,8 @@ sudo systemctl start rpi-dashboard
 | File | Purpose |
 |---|---|
 | `server.js` | Express app, HTTP routes |
-| `display.js` | MAX7219 driver (SPI, scrolling font) |
+| `display.js` | MAX7219 driver (SPI, scrolling) |
+| `font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
 | `keypad.js` | S1 button → TOTP-on-digits behavior |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
