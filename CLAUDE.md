@@ -18,6 +18,7 @@ setup steps live in `README.md`; this file is about the code.
 | `keypad.js` | Owns the `TM1638` instance, polls buttons every 60 ms, debounces the S1 edge, shows TOTP on digits for 10 s |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
+| `deploy.js` | Deployment script — pushes local code to the Pi over SSH and restarts the systemd service |
 
 ## Hardware-detection pattern
 

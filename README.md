@@ -117,6 +117,21 @@ sudo systemctl start rpi-dashboard
 
 ---
 
+## Deploying updates
+
+From your dev machine:
+
+```bash
+cp .env.example .env   # fill in PI_HOST / PI_USER / PI_PASSWORD / PI_PATH
+npm install
+npm run deploy
+```
+
+This copies the project to the Pi over SSH, runs `npm install --production` there, and restarts
+the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in from `.env`).
+
+---
+
 ## API
 
 | Method | Route | Body | Description |
