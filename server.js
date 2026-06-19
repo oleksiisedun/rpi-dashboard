@@ -1,5 +1,4 @@
 const express = require("express");
-const { exec } = require("child_process");
 const path = require("path");
 
 const app = express();
@@ -14,9 +13,11 @@ const TOTP_SECRET = process.env.TOTP_SECRET || "YOUR_SECRET_KEY";
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// ─── Display driver ───────────────────────────────────────────────────────────
+// ─── Drivers ──────────────────────────────────────────────────────────────────
 
+const { generateTOTP } = require("./totp");
 const display = require("./display");
+const keypad  = require("./keypad"); // S1 button → shows TOTP on 7-segment for 10s
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -29,28 +30,29 @@ let displayState = {
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 /**
- * GET /api/totp
+ * GET /api/totp — returns a freshly generated TOTP code.
+ * @param {express.Request} req
+ * @param {express.Response} res
+ * @returns {Promise<void>}
  */
-app.get("/api/totp", (req, res) => {
-  const safeSecret = TOTP_SECRET.replace(/[^A-Z2-7=]/gi, "");
-  if (!safeSecret) {
-    return res.status(500).json({ error: "Invalid TOTP secret configured." });
+app.get("/api/totp", async (req, res) => {
+  try {
+    const code = await generateTOTP(TOTP_SECRET);
+    res.json({ code });
+  } catch (e) {
+    console.error("TOTP error:", e.message);
+    res.status(500).json({
+      error: "Failed to generate TOTP code. Make sure oathtool is installed (sudo apt install oathtool).",
+    });
   }
-
-  exec(`oathtool --totp -b "${safeSecret}"`, (err, stdout, stderr) => {
-    if (err) {
-      console.error("oathtool error:", stderr || err.message);
-      return res.status(500).json({
-        error: "Failed to generate TOTP code. Make sure oathtool is installed (sudo apt install oathtool).",
-      });
-    }
-    res.json({ code: stdout.trim() });
-  });
 });
 
 /**
- * POST /api/display
- * Body: { text: string, speed?: number (ms per column, default 40), brightness?: number (0-15, default 5) }
+ * POST /api/display — start the MAX7219 scroll loop.
+ * Body: { text: string, speed?: number (ms per column, default 40), brightness?: number (0-15, default 5), rotate?: boolean, direction?: 'rtl'|'ltr' }
+ * @param {express.Request} req
+ * @param {express.Response} res
+ * @returns {void}
  */
 app.post("/api/display", (req, res) => {
   const { text, speed = 40, brightness = 5, rotate = false, direction = 'rtl' } = req.body;
@@ -76,7 +78,10 @@ app.post("/api/display", (req, res) => {
 });
 
 /**
- * POST /api/display/stop
+ * POST /api/display/stop — stop the scroll loop and clear the MAX7219 panel.
+ * @param {express.Request} req
+ * @param {express.Response} res
+ * @returns {void}
  */
 app.post("/api/display/stop", (req, res) => {
   console.log(`[Display] Stopping loop.`);
@@ -86,7 +91,10 @@ app.post("/api/display/stop", (req, res) => {
 });
 
 /**
- * GET /api/display/status
+ * GET /api/display/status — returns the current MAX7219 display state.
+ * @param {express.Request} req
+ * @param {express.Response} res
+ * @returns {void}
  */
 app.get("/api/display/status", (req, res) => {
   res.json(displayState);
@@ -94,8 +102,8 @@ app.get("/api/display/status", (req, res) => {
 
 // ─── Cleanup on exit ──────────────────────────────────────────────────────────
 
-process.on("SIGINT",  () => { display.stop(); process.exit(0); });
-process.on("SIGTERM", () => { display.stop(); process.exit(0); });
+process.on("SIGINT",  () => { display.stop(); keypad.stop(); process.exit(0); });
+process.on("SIGTERM", () => { display.stop(); keypad.stop(); process.exit(0); });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
@@ -103,4 +111,5 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`RPi Dashboard running at http://0.0.0.0:${PORT}`);
   console.log(`TOTP secret: ${TOTP_SECRET === "YOUR_SECRET_KEY" ? "⚠️  NOT SET — update TOTP_SECRET" : "✅ configured"}`);
   console.log(`Display: ${display.available ? "✅ MAX7219 ready" : "⚠️  running in stub mode (no SPI device)"}`);
+  console.log(`Keypad:  ${keypad.available ? "✅ TM1638 ready — press S1 to show TOTP" : "⚠️  running in stub mode (no GPIO device)"}`);
 });

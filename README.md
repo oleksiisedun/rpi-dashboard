@@ -1,12 +1,16 @@
 # RPi Dashboard
 
 Local Node.js web dashboard for Raspberry Pi with:
-- **2FA code generation** via `oathtool`
+- **2FA code generation** via `oathtool` (web UI button + physical S1 button)
 - **MAX7219 4×8×8 LED matrix** — scrolling text in Latin + Ukrainian Cyrillic
+- **TM1638 LED&KEY module** — press S1 to show the TOTP code on the 7-segment
+  digits for 10 seconds
 
 ---
 
 ## Hardware
+
+### MAX7219 dot-matrix display
 
 | Module pin | RPi pin | GPIO |
 |---|---|---|
@@ -18,11 +22,23 @@ Local Node.js web dashboard for Raspberry Pi with:
 
 Connect to the **IN** connector (rightmost on the PCB back).
 
+### TM1638 LED&KEY module
+
+| Module pin (J1) | RPi pin | GPIO |
+|---|---|---|
+| VCC | Pin 4  | 5V |
+| GND | Pin 9  | GND |
+| STB | Pin 29 | GPIO 5 |
+| CLK | Pin 31 | GPIO 6 |
+| DIO | Pin 33 | GPIO 13 |
+
+These pins don't conflict with the MAX7219's SPI0 pins.
+
 ---
 
 ## Setup on Raspberry Pi
 
-### 1. Enable SPI
+### 1. Enable SPI (for the MAX7219)
 
 ```bash
 sudo raspi-config
@@ -31,29 +47,44 @@ sudo raspi-config
 ls /dev/spi*   # should show /dev/spidev0.0
 ```
 
-### 2. System packages
+### 2. GPIO group permissions (for the TM1638)
+
+```bash
+sudo usermod -a -G gpio pi
+# logout and back in (or reboot) for the group change to take effect
+```
+
+### 3. System packages
 
 ```bash
 sudo apt update
-sudo apt install oathtool nodejs npm
+sudo apt install oathtool nodejs npm build-essential
 ```
 
-### 3. Install Node dependencies
+### 4. Install Node dependencies
 
 ```bash
 cd ~/rpi-dashboard
 npm install
-# spi-device compiles a native addon — needs build-essential
-# If it fails: sudo apt install build-essential && npm install
+# spi-device and rpio both compile native addons — build-essential is required
 ```
 
-### 4. Run
+### 5. Run
 
 ```bash
 TOTP_SECRET=YOUR_ACTUAL_SECRET node server.js
 ```
 
 Open `http://<RPI_IP>:3000` from any device on your network.
+
+You should see in the logs:
+```
+Display: ✅ MAX7219 ready
+Keypad:  ✅ TM1638 ready — press S1 to show TOTP
+```
+
+Press **S1** on the TM1638 board — the TOTP code appears on the 7-segment
+digits for 10 seconds, then clears automatically.
 
 ---
 
@@ -91,17 +122,29 @@ sudo systemctl start rpi-dashboard
 | Method | Route | Body | Description |
 |---|---|---|---|
 | GET  | `/api/totp` | — | Returns `{ code }` |
-| POST | `/api/display` | `{ text, speed?, brightness? }` | Start scroll loop |
-| POST | `/api/display/stop` | — | Stop + clear display |
-| GET  | `/api/display/status` | — | Current state |
+| POST | `/api/display` | `{ text, speed?, brightness?, rotate?, direction? }` | Start scroll loop |
+| POST | `/api/display/stop` | — | Stop + clear MAX7219 display |
+| GET  | `/api/display/status` | — | Current MAX7219 state |
 
-`speed` = ms per column shift (default 40; lower = faster).
-`brightness` = 0–15 (default 5).
+`speed` = ms per column shift (default 40). `brightness` = 0–15 (default 5).
+`direction` = `'rtl'` (default) or `'ltr'`.
+
+---
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `server.js` | Express app, HTTP routes |
+| `display.js` | MAX7219 driver (SPI, scrolling font) |
+| `tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
+| `keypad.js` | S1 button → TOTP-on-digits behavior |
+| `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
 
 ---
 
 ## Development without hardware
 
-`display.js` detects missing SPI and falls back to stub mode —
-it logs column hex values to stdout so you can develop on any machine
+Both `display.js` and `tm1638.js`/`keypad.js` detect missing SPI/GPIO
+and fall back to stub/log mode, so you can develop on any machine
 without a Pi connected.
