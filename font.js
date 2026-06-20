@@ -114,7 +114,7 @@ const CYR = {
   // Е — like E (left bar + 3 horizontal strokes)
   'Е': [0x7F,0x49,0x49,0x49,0x41],
   // Є — open E facing left (like reversed C with middle bar)
-  'Є': [0x22,0x49,0x49,0x49,0x3E],
+  'Є': [0x3E,0x49,0x49,0x49,0x22],
   // Ж — like two K back-to-back around a center vertical
   'Ж': [0x7F,0x08,0x7F,0x08,0x7F],
   // З — like digit 3 / Z with curves
@@ -179,6 +179,15 @@ const CYR_LOWER = {
 for (const [lo, up] of Object.entries(CYR_LOWER)) CYR[lo] = CYR[up];
 Object.assign(FONT, CYR);
 
+// ── Custom symbols ───────────────────────────────────────────────────────────
+//
+// Glyphs outside Latin/Cyrillic (icons, arrows, etc.), added via tools/glyph-editor/.
+
+const CUSTOM = {
+  '❤': [0x1C,0x3E,0x7C,0x3E,0x1C]
+};
+Object.assign(FONT, CUSTOM);
+
 const UNKNOWN_GLYPH = [0x3E,0x3E,0x3E,0x3E,0x3E];
 
-module.exports = { FONT, UNKNOWN_GLYPH };
+module.exports = { FONT, UNKNOWN_GLYPH, LATIN_RAW, CYR, CUSTOM };
