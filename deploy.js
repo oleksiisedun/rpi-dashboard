@@ -1,8 +1,9 @@
 require("dotenv").config();
 const path = require("path");
 const { NodeSSH } = require("node-ssh");
+const config = require("./config");
 
-const EXCLUDED = new Set(["node_modules", ".git", ".env", "tools", ".display-state.json"]);
+const EXCLUDED = new Set(config.deploy.EXCLUDED);
 
 /**
  * Reads and validates the Pi connection settings from process.env.
@@ -19,7 +20,7 @@ function loadConfig() {
     host: PI_HOST,
     username: PI_USER,
     password: PI_PASSWORD,
-    remotePath: PI_PATH || "/home/pi/rpi-dashboard",
+    remotePath: PI_PATH || config.deploy.DEFAULT_REMOTE_PATH,
   };
 }
 

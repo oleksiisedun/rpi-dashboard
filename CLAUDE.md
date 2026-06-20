@@ -12,6 +12,7 @@ setup steps live in `README.md`; this file is about the code.
 
 | File | Responsibility |
 |---|---|
+| `config.js` | Single place for tunable values (durations, intervals, default display settings, GPIO pins, ports, secret defaults, deploy path/exclusions) used by `server.js`/`display.js`/`keypad.js`/`deploy.js`. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
 | `server.js` | Express app, all HTTP routes, in-memory `displayState`/`displaySettings` (persisted to `.display-state.json` and restored on boot), S8 random-string overlay handler, SIGINT/SIGTERM cleanup |
 | `display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop |
 | `font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `display.js` |

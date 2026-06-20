@@ -1,15 +1,16 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const config = require("./config");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = config.server.PORT;
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const TOTP_SECRET = process.env.TOTP_SECRET || "YOUR_SECRET_KEY";
+const TOTP_SECRET = config.server.TOTP_SECRET;
 const RANDOM_STRINGS_PATH = path.join(__dirname, ".strings");
-const RANDOM_STRING_DURATION_MS = 30000;
+const RANDOM_STRING_DURATION_MS = config.display.RANDOM_STRING_DURATION_MS;
 const DISPLAY_STATE_PATH = path.join(__dirname, ".display-state.json");
 
 /**
@@ -77,7 +78,12 @@ let displayState = {
 
 // Matrix settings from the last web UI submission — kept around (even after
 // stop/S8 overlay) so the S8 random-string feature can reuse them.
-let displaySettings = { speed: 40, brightness: 5, rotate: false, direction: "rtl" };
+let displaySettings = {
+  speed: config.display.DEFAULT_SPEED_MS,
+  brightness: config.display.DEFAULT_BRIGHTNESS,
+  rotate: config.display.DEFAULT_ROTATE,
+  direction: config.display.DEFAULT_DIRECTION,
+};
 
 const persistedDisplay = loadDisplayState();
 if (persistedDisplay) {
@@ -113,7 +119,13 @@ app.get("/api/totp", async (req, res) => {
  * @returns {void}
  */
 app.post("/api/display", (req, res) => {
-  const { text, speed = 40, brightness = 5, rotate = false, direction = 'rtl' } = req.body;
+  const {
+    text,
+    speed = config.display.DEFAULT_SPEED_MS,
+    brightness = config.display.DEFAULT_BRIGHTNESS,
+    rotate = config.display.DEFAULT_ROTATE,
+    direction = config.display.DEFAULT_DIRECTION,
+  } = req.body;
   if (typeof text !== "string" || text.trim() === "") {
     return res.status(400).json({ error: "text field is required." });
   }

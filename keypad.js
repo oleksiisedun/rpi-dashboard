@@ -10,17 +10,23 @@
  */
 
 const { generateTOTP } = require("./totp");
+const config = require("./config");
 
-const TOTP_SECRET = process.env.TOTP_SECRET || "YOUR_SECRET_KEY";
-const SHOW_DURATION_MS = 10000;
-const POLL_INTERVAL_MS = 60; // ~16 Hz — plenty fast for a human button press
+const TOTP_SECRET = config.server.TOTP_SECRET;
+const SHOW_DURATION_MS = config.keypad.TOTP_SHOW_DURATION_MS;
+const POLL_INTERVAL_MS = config.keypad.POLL_INTERVAL_MS; // ~16 Hz — plenty fast for a human button press
 
 let tm = null;
 let available = false;
 
 try {
   const TM1638 = require("./tm1638");
-  tm = new TM1638({ stb: 29, clk: 31, dio: 33, brightness: 4 });
+  tm = new TM1638({
+    stb: config.keypad.TM1638_STB_PIN,
+    clk: config.keypad.TM1638_CLK_PIN,
+    dio: config.keypad.TM1638_DIO_PIN,
+    brightness: config.keypad.TM1638_BRIGHTNESS,
+  });
   available = true;
   console.log("[Keypad] TM1638 initialized OK");
 } catch (e) {
@@ -89,7 +95,7 @@ async function handleS1Press() {
     console.error("[Keypad] TOTP error:", e.message);
     showOnDigits("Err");
     if (clearTimer) clearTimeout(clearTimer);
-    clearTimer = setTimeout(() => { clearDigits(); clearTimer = null; }, 3000);
+    clearTimer = setTimeout(() => { clearDigits(); clearTimer = null; }, config.keypad.ERROR_SHOW_DURATION_MS);
   }
 }
 

@@ -13,11 +13,12 @@
  */
 
 const { FONT, UNKNOWN_GLYPH } = require("./font");
+const config = require("./config");
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const NUM_MODULES = 4;
-const SPI_SPEED   = 10000000;
+const NUM_MODULES = config.display.NUM_MODULES;
+const SPI_SPEED   = config.display.SPI_SPEED_HZ;
 
 const REG = {
   NOOP        : 0x00,
@@ -188,7 +189,12 @@ let _scrollTimer = null;
  * @param {{speed?: number, brightness?: number, rotate?: boolean, direction?: 'rtl'|'ltr'}} [options]
  * @returns {void}
  */
-function startScroll(text, { speed = 40, brightness = 5, rotate = false, direction = 'rtl' } = {}) {
+function startScroll(text, {
+  speed = config.display.DEFAULT_SPEED_MS,
+  brightness = config.display.DEFAULT_BRIGHTNESS,
+  rotate = config.display.DEFAULT_ROTATE,
+  direction = config.display.DEFAULT_DIRECTION,
+} = {}) {
   stop();
   if (spi) _setBrightness(brightness);
 
