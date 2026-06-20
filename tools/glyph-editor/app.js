@@ -65,11 +65,21 @@ async function loadFontData() {
   renderCharList();
 }
 
+/**
+ * Converts 5 column bytes into an 8×5 row/col bit matrix for the pixel grid.
+ * @param {number[]} cols - 5 bytes, bit0 (LSB) = top row, bit7 (MSB) = bottom row.
+ * @returns {number[][]} 8 rows of 5 bits each.
+ */
 function colsToBits(cols) {
   return Array.from({length: 8}, (_, r) =>
     Array.from({length: 5}, (_, c) => (cols[c] >> r) & 1)
   );
 }
+
+/**
+ * Converts the current 8×5 bit matrix back into 5 column bytes.
+ * @returns {number[]} 5 bytes, one per column.
+ */
 function bitsToBytes() {
   return Array.from({length: 5}, (_, c) => {
     let b = 0;
@@ -85,12 +95,21 @@ function bitsToBytes() {
 const charListEl = document.getElementById('charList');
 const searchInput = document.getElementById('searchInput');
 
+/**
+ * Returns the character list backing the given sidebar tab.
+ * @param {'latin'|'cyrillic'|'custom'} tab
+ * @returns {string[]}
+ */
 function getCharsForTab(tab) {
   if (tab === 'latin') return LATIN_CHARS;
   if (tab === 'cyrillic') return CYRILLIC_CHARS;
   return customChars;
 }
 
+/**
+ * Rebuilds the sidebar character grid for the active tab, applying the search filter.
+ * @returns {void}
+ */
 function renderCharList() {
   const filter = searchInput.value.trim();
   const chars = getCharsForTab(currentTab).filter(ch =>
@@ -116,6 +135,10 @@ function renderCharList() {
   }
 }
 
+/**
+ * Wires each sidebar tab button to switch the active tab and re-render the char list.
+ * @returns {void}
+ */
 document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -130,6 +153,11 @@ searchInput.addEventListener('input', renderCharList);
 // Editor — pixel grid
 // ════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Loads a character into the editor, seeding its bitmap if it's new, and refreshes the UI.
+ * @param {string} ch
+ * @returns {void}
+ */
 function loadChar(ch) {
   currentChar = ch;
   if (!font[ch]) font[ch] = [0,0,0,0,0];
@@ -139,6 +167,10 @@ function loadChar(ch) {
   renderCharList();
 }
 
+/**
+ * Re-renders every view that depends on the current `bits` matrix.
+ * @returns {void}
+ */
 function renderAll() {
   renderGrid();
   renderPreview();
@@ -146,12 +178,20 @@ function renderAll() {
   renderSingleOutput();
 }
 
+/**
+ * Syncs the pixel grid buttons' "on" class with the current `bits` matrix.
+ * @returns {void}
+ */
 function renderGrid() {
   document.querySelectorAll('.px').forEach(px => {
     px.classList.toggle('on', !!bits[+px.dataset.r][+px.dataset.c]);
   });
 }
 
+/**
+ * Draws the current glyph onto the small canvas preview.
+ * @returns {void}
+ */
 function renderPreview() {
   const cv = document.getElementById('prev');
   const ctx = cv.getContext('2d');
@@ -165,6 +205,10 @@ function renderPreview() {
     }
 }
 
+/**
+ * Updates the per-column hex byte readout under the pixel grid.
+ * @returns {void}
+ */
 function renderHex() {
   const bytes = bitsToBytes();
   document.querySelectorAll('.hex-box').forEach((el, i) => {
@@ -172,6 +216,11 @@ function renderHex() {
   });
 }
 
+/**
+ * Commits the current `bits` matrix into `font[currentChar]` and renders the
+ * single-glyph `font.js`-style code snippet.
+ * @returns {void}
+ */
 function renderSingleOutput() {
   const bytes = bitsToBytes();
   font[currentChar] = bytes;
@@ -180,6 +229,10 @@ function renderSingleOutput() {
     `[${bytes.map(v=>'0x'+v.toString(16).toUpperCase().padStart(2,'0')).join(',')}], // ${label}`;
 }
 
+/**
+ * Flags the current character as touched in this session.
+ * @returns {void}
+ */
 function markModified() {
   modified.add(currentChar);
 }
@@ -189,6 +242,12 @@ const pgrid = document.getElementById('pixelGrid');
 let painting = false, paintVal = 0;
 document.addEventListener('mouseup', () => painting = false);
 
+/**
+ * Builds the 8×5 pixel grid buttons and wires click-drag painting: mousedown toggles
+ * the pressed pixel and starts a drag; mouseenter during a drag paints with that
+ * same value, so a single drag stroke draws or erases a run of pixels.
+ * @returns {void}
+ */
 for (let r = 0; r < 8; r++)
   for (let c = 0; c < 5; c++) {
     const px = document.createElement('button');
@@ -214,17 +273,35 @@ for (let c = 0; c < 5; c++) { const d=document.createElement('div'); d.className
 // Transform tools
 // ════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Runs a `bits`-mutating transform, then marks the glyph modified and re-renders.
+ * @param {() => void} fn - Mutates the module-level `bits` matrix in place.
+ * @returns {void}
+ */
 function applyTransform(fn) { fn(); markModified(); renderAll(); renderCharList(); }
 
+/** Clears every pixel in the current glyph. @returns {void} */
 document.getElementById('clearBtn').onclick   = () => applyTransform(() => { bits = Array.from({length:8},()=>new Array(5).fill(0)); });
+/** Inverts every pixel in the current glyph. @returns {void} */
 document.getElementById('invertBtn').onclick  = () => applyTransform(() => { bits = bits.map(row=>row.map(v=>1-v)); });
+/** Mirrors the current glyph horizontally. @returns {void} */
 document.getElementById('flipHBtn').onclick   = () => applyTransform(() => { bits = bits.map(row=>[...row].reverse()); });
+/** Mirrors the current glyph vertically. @returns {void} */
 document.getElementById('flipVBtn').onclick   = () => applyTransform(() => { bits = [...bits].reverse(); });
+/** Shifts the current glyph one column left, discarding the leftmost column. @returns {void} */
 document.getElementById('shiftLBtn').onclick  = () => applyTransform(() => { bits = bits.map(r=>[...r.slice(1),0]); });
+/** Shifts the current glyph one column right, discarding the rightmost column. @returns {void} */
 document.getElementById('shiftRBtn').onclick  = () => applyTransform(() => { bits = bits.map(r=>[0,...r.slice(0,4)]); });
+/** Shifts the current glyph one row up, discarding the top row. @returns {void} */
 document.getElementById('shiftUBtn').onclick  = () => applyTransform(() => { bits = [...bits.slice(1), new Array(5).fill(0)]; });
+/** Shifts the current glyph one row down, discarding the bottom row. @returns {void} */
 document.getElementById('shiftDBtn').onclick  = () => applyTransform(() => { bits = [new Array(5).fill(0), ...bits.slice(0,7)]; });
 
+/**
+ * Deletes the current custom character entirely (Latin chars can only be cleared,
+ * since the editor expects a fixed 95-char Latin range).
+ * @returns {void}
+ */
 document.getElementById('deleteCharBtn').onclick = () => {
   if (LATIN_CHARS.includes(currentChar)) {
     alert('Latin characters can be cleared but not deleted (fixed 95-char range). Use Clear instead.');
@@ -243,6 +320,11 @@ document.getElementById('deleteCharBtn').onclick = () => {
 // Add new character
 // ════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Adds the character typed into the "new char" input as a custom glyph (seeded
+ * blank if not already in the font), switches to the Custom tab, and loads it.
+ * @returns {void}
+ */
 document.getElementById('addCharBtn').onclick = () => {
   const input = document.getElementById('newCharInput');
   const ch = input.value;
@@ -260,6 +342,10 @@ document.getElementById('addCharBtn').onclick = () => {
   input.value = '';
   loadChar(ch);
 };
+/**
+ * Lets Enter in the "new char" input trigger the Add button instead of submitting a form.
+ * @returns {void}
+ */
 document.getElementById('newCharInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('addCharBtn').click();
 });
@@ -268,10 +354,20 @@ document.getElementById('newCharInput').addEventListener('keydown', e => {
 // Export — generate font.js-ready code
 // ════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Formats bytes as a comma-separated `0xNN` list for generated `font.js` code.
+ * @param {number[]} bytes
+ * @returns {string}
+ */
 function byteList(bytes) {
   return bytes.map(v => '0x' + v.toString(16).toUpperCase().padStart(2,'0')).join(',');
 }
 
+/**
+ * Builds the full `font.js`-ready source (LATIN_RAW, CYR, CYR_LOWER, CUSTOM) from the
+ * current in-memory font state and writes it into the export textarea.
+ * @returns {void}
+ */
 function generateExport() {
   // LATIN_RAW — fixed order, 95 entries
   const latinLines = LATIN_CHARS.map(ch => {
@@ -314,11 +410,20 @@ function generateExport() {
 }
 
 document.getElementById('generateBtn').onclick = generateExport;
+/**
+ * Regenerates the export code and scrolls the export section into view.
+ * @returns {void}
+ */
 document.getElementById('scrollToExport').onclick = () => {
   generateExport();
   document.getElementById('exportSection').scrollIntoView({ behavior: 'smooth' });
 };
 
+/**
+ * Copies the generated export code to the clipboard, falling back to a
+ * select+`execCommand('copy')` for browsers without clipboard API access.
+ * @returns {Promise<void>}
+ */
 document.getElementById('copyExportBtn').onclick = async () => {
   const ta = document.getElementById('exportTextarea');
   if (!ta.value) generateExport();
@@ -332,6 +437,10 @@ document.getElementById('copyExportBtn').onclick = async () => {
   }
 };
 
+/**
+ * Downloads the generated export code as a standalone `font-export.js` file.
+ * @returns {void}
+ */
 document.getElementById('downloadBtn').onclick = () => {
   if (!document.getElementById('exportTextarea').value) generateExport();
   const blob = new Blob([document.getElementById('exportTextarea').value], { type: 'text/javascript' });
@@ -342,6 +451,12 @@ document.getElementById('downloadBtn').onclick = () => {
   URL.revokeObjectURL(url);
 };
 
+/**
+ * Briefly swaps a button's label to give feedback, then restores it.
+ * @param {string} id - Element id of the button.
+ * @param {string} text - Temporary label to show.
+ * @returns {void}
+ */
 function flashButton(id, text) {
   const btn = document.getElementById(id);
   const original = btn.textContent;
@@ -353,6 +468,11 @@ function flashButton(id, text) {
 // Import / Export JSON (full session save/restore)
 // ════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Downloads the full editor session (font, custom chars, modified set) as JSON
+ * so work can be resumed later without re-running the export step.
+ * @returns {void}
+ */
 document.getElementById('exportJsonBtn').onclick = () => {
   const payload = {
     font,
@@ -369,6 +489,12 @@ document.getElementById('exportJsonBtn').onclick = () => {
 };
 
 document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
+/**
+ * Restores a previously exported session JSON file, merging it into the
+ * current in-memory font state.
+ * @param {Event} e
+ * @returns {Promise<void>}
+ */
 document.getElementById('importFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
