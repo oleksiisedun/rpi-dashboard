@@ -19,6 +19,7 @@ setup steps live in `README.md`; this file is about the code.
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
 | `deploy.js` | Deployment script — pushes local code to the Pi over SSH and restarts the systemd service |
+| `tools/glyph-editor/` | Dev-only glyph design tool for `font.js` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `font.js` live and serves it over `/api/font`) — not part of the deployed app |
 
 ## Hardware-detection pattern
 
@@ -72,3 +73,6 @@ Runs on `:3000`. No test suite or linter is configured in this project.
 - The Cyrillic/Latin font bitmaps in `font.js` are hand-verified pixel art (see the inline
   comments documenting each glyph's shape). Don't simplify or regenerate them without visually
   re-checking against the MAX7219.
+- `font.js` also exports a `CUSTOM` section for glyphs outside Latin/Cyrillic, meant to be
+  populated via `tools/glyph-editor/`.
+- `deploy.js` excludes the whole `tools/` directory — it's dev-only and must never reach the Pi.

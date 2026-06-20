@@ -2,7 +2,7 @@ require("dotenv").config();
 const path = require("path");
 const { NodeSSH } = require("node-ssh");
 
-const EXCLUDED = new Set(["node_modules", ".git", ".env"]);
+const EXCLUDED = new Set(["node_modules", ".git", ".env", "tools"]);
 
 /**
  * Reads and validates the Pi connection settings from process.env.
