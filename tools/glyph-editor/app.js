@@ -6,16 +6,6 @@
 // bit7 (MSB) = bottom row, 5 bytes per glyph (one per column, left to right).
 // ════════════════════════════════════════════════════════════════════════════
 
-// Ukrainian alphabet case pairing — not bitmap data, just used so "Generate font.js
-// code" can reproduce font.js's compact lowercase-mirrors-uppercase structure.
-const CYR_LOWER_MAP = {
-  'а':'А','б':'Б','в':'В','г':'Г','ґ':'Ґ','д':'Д','е':'Е','є':'Є',
-  'ж':'Ж','з':'З','и':'И','і':'І','ї':'Ї','й':'Й','к':'К','л':'Л',
-  'м':'М','н':'Н','о':'О','п':'П','р':'Р','с':'С','т':'Т','у':'У',
-  'ф':'Ф','х':'Х','ц':'Ц','ч':'Ч','ш':'Ш','щ':'Щ','ь':'Ь','ю':'Ю',
-  'я':'Я',
-};
-
 let LATIN_CHARS = [];
 let CYRILLIC_CHARS = [];
 
@@ -364,49 +354,14 @@ function byteList(bytes) {
 }
 
 /**
- * Builds the full `font.js`-ready source (LATIN_RAW, CYR, CYR_LOWER, CUSTOM) from the
- * current in-memory font state and writes it into the export textarea.
+ * Builds one `'char': [bytes],` line per character modified this session, so it
+ * can be pasted directly into the relevant object (usually CUSTOM) in font.js.
  * @returns {void}
  */
 function generateExport() {
-  // LATIN_RAW — fixed order, 95 entries
-  const latinLines = LATIN_CHARS.map(ch => {
-    const label = ch === ' ' ? 'SP' : ch;
-    return `  [${byteList(font[ch])}], // ${label}`;
-  });
-
-  // CYR — canonical uppercase entries only; lowercase is mirrored via CYR_LOWER below
-  const cyrUpperChars = CYRILLIC_CHARS.filter(ch => !(ch in CYR_LOWER_MAP));
-  const cyrLines = cyrUpperChars.map(ch => `  '${ch}': [${byteList(font[ch])}],`);
-
-  const customLines = customChars.map(ch => `  '${ch}': [${byteList(font[ch])}],`);
-
-  const out = [
-    'const LATIN_RAW = [',
-    latinLines.join('\n'),
-    '];',
-    'for (let i = 0; i < LATIN_RAW.length; i++) {',
-    '  FONT[String.fromCharCode(32 + i)] = LATIN_RAW[i];',
-    '}',
-    '',
-    'const CYR = {',
-    cyrLines.join('\n'),
-    '};',
-    '',
-    '// Lowercase → same bitmap as uppercase',
-    'const CYR_LOWER = {',
-    '  ' + Object.entries(CYR_LOWER_MAP).map(([lo,up]) => `'${lo}':'${up}'`).join(','),
-    '};',
-    'for (const [lo, up] of Object.entries(CYR_LOWER)) CYR[lo] = CYR[up];',
-    'Object.assign(FONT, CYR);',
-    '',
-    'const CUSTOM = {',
-    customLines.join('\n'),
-    '};',
-    'Object.assign(FONT, CUSTOM);',
-  ].join('\n');
-
-  document.getElementById('exportTextarea').value = out;
+  const lines = [...modified].map(ch => `'${ch}': [${byteList(font[ch])}],`);
+  document.getElementById('exportTextarea').value =
+    lines.length ? lines.join('\n') : '// No characters modified this session.';
 }
 
 document.getElementById('generateBtn').onclick = generateExport;
