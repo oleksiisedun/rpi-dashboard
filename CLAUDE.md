@@ -12,13 +12,14 @@ setup steps live in `README.md`; this file is about the code.
 
 | File | Responsibility |
 |---|---|
-| `server.js` | Express app, all HTTP routes, in-memory `displayState`/`displaySettings`, S8 random-string overlay handler, SIGINT/SIGTERM cleanup |
+| `server.js` | Express app, all HTTP routes, in-memory `displayState`/`displaySettings` (persisted to `.display-state.json` and restored on boot), S8 random-string overlay handler, SIGINT/SIGTERM cleanup |
 | `display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop |
 | `font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `display.js` |
 | `tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
 | `keypad.js` | Owns the `TM1638` instance, polls buttons every 60 ms, debounces button edges, shows TOTP on digits for 10s on S1, fires a registered callback on S8 (`onS8Press`) |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
 | `.strings` | One message per line (blank/`#` lines ignored) — source for the S8 random-string overlay. Gitignored (per-machine content, like `.env`); `.strings.example` is the committed template |
+| `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` (per-machine runtime state, like `.env` — pushing the dev machine's copy would clobber the Pi's actual state) |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
 | `deploy.js` | Deployment script — pushes local code to the Pi over SSH and restarts the systemd service |
 | `tools/glyph-editor/` | Dev-only glyph design tool for `font.js` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `font.js` live and serves it over `/api/font`) — not part of the deployed app |

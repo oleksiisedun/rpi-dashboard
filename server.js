@@ -10,6 +10,33 @@ const PORT = process.env.PORT || 3000;
 const TOTP_SECRET = process.env.TOTP_SECRET || "YOUR_SECRET_KEY";
 const RANDOM_STRINGS_PATH = path.join(__dirname, ".strings");
 const RANDOM_STRING_DURATION_MS = 30000;
+const DISPLAY_STATE_PATH = path.join(__dirname, ".display-state.json");
+
+/**
+ * Persists the current display state and settings to disk so they survive a restart.
+ * @param {object} displayState
+ * @param {object} displaySettings
+ * @returns {void}
+ */
+function saveDisplayState(displayState, displaySettings) {
+  try {
+    fs.writeFileSync(DISPLAY_STATE_PATH, JSON.stringify({ displayState, displaySettings }));
+  } catch (e) {
+    console.warn(`[Display] Could not save state to ${DISPLAY_STATE_PATH}: ${e.message}`);
+  }
+}
+
+/**
+ * Loads the persisted display state and settings from disk, if present.
+ * @returns {{ displayState: object, displaySettings: object }|null}
+ */
+function loadDisplayState() {
+  try {
+    return JSON.parse(fs.readFileSync(DISPLAY_STATE_PATH, "utf8"));
+  } catch (e) {
+    return null;
+  }
+}
 
 /**
  * Reads .strings and returns the non-empty, non-comment lines.
@@ -51,6 +78,12 @@ let displayState = {
 // Matrix settings from the last web UI submission — kept around (even after
 // stop/S8 overlay) so the S8 random-string feature can reuse them.
 let displaySettings = { speed: 40, brightness: 5, rotate: false, direction: "rtl" };
+
+const persistedDisplay = loadDisplayState();
+if (persistedDisplay) {
+  if (persistedDisplay.displayState) displayState = persistedDisplay.displayState;
+  if (persistedDisplay.displaySettings) displaySettings = persistedDisplay.displaySettings;
+}
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -95,6 +128,7 @@ app.post("/api/display", (req, res) => {
     startedAt: new Date().toISOString(),
   };
   displaySettings = { speed, brightness, rotate, direction };
+  saveDisplayState(displayState, displaySettings);
 
   console.log(`[Display] Starting loop: "${displayState.text}" dir=${direction} rotate=${rotate}`);
 
@@ -113,6 +147,7 @@ app.post("/api/display/stop", (req, res) => {
   console.log(`[Display] Stopping loop.`);
   display.stop();
   displayState = { active: false, text: "", startedAt: null };
+  saveDisplayState(displayState, displaySettings);
   res.json({ ok: true, message: "Display stopped." });
 });
 
@@ -165,6 +200,13 @@ function handleS8Press() {
 }
 
 keypad.onS8Press(handleS8Press);
+
+// ─── Restore display state from before the last restart ───────────────────────
+
+if (displayState.active) {
+  console.log(`[Display] Restoring previous display: "${displayState.text}"`);
+  display.startScroll(displayState.text, displaySettings);
+}
 
 // ─── Cleanup on exit ──────────────────────────────────────────────────────────
 
