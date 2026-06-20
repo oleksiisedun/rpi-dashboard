@@ -162,9 +162,9 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 | File | Purpose |
 |---|---|
 | `server.js` | Express app, HTTP routes |
-| `display.js` | MAX7219 driver (SPI, scrolling) |
-| `font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
-| `tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
+| `drivers/display.js` | MAX7219 driver (SPI, scrolling) |
+| `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
+| `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
 | `keypad.js` | S1 button → TOTP-on-digits behavior; S8 button → random-string overlay (handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
 | `.strings.example` | Template for `.strings` (the gitignored, real one) — copy it per step 5 above |
@@ -173,6 +173,6 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 
 ## Development without hardware
 
-Both `display.js` and `tm1638.js`/`keypad.js` detect missing SPI/GPIO
+Both `drivers/display.js` and `drivers/tm1638.js`/`keypad.js` detect missing SPI/GPIO
 and fall back to stub/log mode, so you can develop on any machine
 without a Pi connected.

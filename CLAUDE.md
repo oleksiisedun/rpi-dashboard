@@ -14,16 +14,16 @@ setup steps live in `README.md`; this file is about the code.
 |---|---|
 | `config.js` | Single place for tunable values (durations, intervals, default display settings, GPIO pins, ports, secret defaults, deploy path/exclusions) used by `server.js`/`display.js`/`keypad.js`/`deploy.js`. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
 | `server.js` | Express app, all HTTP routes, in-memory `displayState`/`displaySettings` (persisted to `.display-state.json` and restored on boot), S8 random-string overlay handler, SIGINT/SIGTERM cleanup |
-| `display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop |
-| `font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `display.js` |
-| `tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
+| `drivers/display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop |
+| `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js` |
+| `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
 | `keypad.js` | Owns the `TM1638` instance, polls buttons every 60 ms, debounces button edges, shows TOTP on digits for 10s on S1, fires a registered callback on S8 (`onS8Press`) |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
 | `.strings` | One message per line (blank/`#` lines ignored) — source for the S8 random-string overlay. Gitignored (per-machine content, like `.env`); `.strings.example` is the committed template |
 | `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` (per-machine runtime state, like `.env` — pushing the dev machine's copy would clobber the Pi's actual state) |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
 | `deploy.js` | Deployment script — pushes local code to the Pi over SSH and restarts the systemd service |
-| `tools/glyph-editor/` | Dev-only glyph design tool for `font.js` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `font.js` live and serves it over `/api/font`) — not part of the deployed app |
+| `glyph-editor/` | Dev-only glyph design tool for `drivers/font.js` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `drivers/font.js` live and serves it over `/api/font`) — not part of the deployed app |
 
 ## Hardware-detection pattern
 
@@ -78,7 +78,9 @@ Runs on `:3000`. No test suite or linter is configured in this project.
   comments documenting each glyph's shape). Don't simplify or regenerate them without visually
   re-checking against the MAX7219.
 - `font.js` also exports a `CUSTOM` section for glyphs outside Latin/Cyrillic, meant to be
-  populated via `tools/glyph-editor/`.
-- `deploy.js` excludes the whole `tools/` directory — it's dev-only and must never reach the Pi.
+  populated via `glyph-editor/`.
+- `drivers/` holds hardware-facing modules required by `server.js`/`keypad.js` at runtime, so
+  unlike `glyph-editor/` it is **not** in `deploy.js`'s exclude list.
+- `deploy.js` excludes the whole `glyph-editor/` directory — it's dev-only and must never reach the Pi.
 - `.strings` is gitignored but **not** in `deploy.js`'s exclude list, so it deploys
   normally — unlike `.env`, it's meant to reach the Pi, just not git.

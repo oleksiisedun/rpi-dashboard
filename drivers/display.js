@@ -13,7 +13,7 @@
  */
 
 const { FONT, UNKNOWN_GLYPH } = require("./font");
-const config = require("./config");
+const config = require("../config");
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

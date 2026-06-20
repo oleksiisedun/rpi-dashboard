@@ -130,7 +130,7 @@ Object.assign(FONT, CYR);
 
 // ── Custom symbols ───────────────────────────────────────────────────────────
 //
-// Glyphs outside Latin/Cyrillic (icons, arrows, etc.), added via tools/glyph-editor/.
+// Glyphs outside Latin/Cyrillic (icons, arrows, etc.), added via glyph-editor/.
 
 const CUSTOM = {
   '❤': [0x18,0x3C,0x78,0x3C,0x18],

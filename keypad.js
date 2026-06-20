@@ -20,7 +20,7 @@ let tm = null;
 let available = false;
 
 try {
-  const TM1638 = require("./tm1638");
+  const TM1638 = require("./drivers/tm1638");
   tm = new TM1638({
     stb: config.keypad.TM1638_STB_PIN,
     clk: config.keypad.TM1638_CLK_PIN,

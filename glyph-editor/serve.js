@@ -1,7 +1,7 @@
 "use strict";
 
 const express = require("express");
-const { LATIN_RAW, CYR, CUSTOM, UNKNOWN_GLYPH } = require("../../font.js");
+const { LATIN_RAW, CYR, CUSTOM, UNKNOWN_GLYPH } = require("../drivers/font.js");
 
 const app = express();
 const PORT = process.env.PORT || 4000;

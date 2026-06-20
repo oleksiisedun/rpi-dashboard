@@ -65,7 +65,7 @@ app.use(express.static(path.join(__dirname, "public")));
 // ─── Drivers ──────────────────────────────────────────────────────────────────
 
 const { generateTOTP } = require("./totp");
-const display = require("./display");
+const display = require("./drivers/display");
 const keypad  = require("./keypad"); // S1 button → shows TOTP on 7-segment for 10s
 
 // ─── State ────────────────────────────────────────────────────────────────────

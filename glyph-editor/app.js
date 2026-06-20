@@ -36,7 +36,7 @@ async function loadFontData() {
   } catch (err) {
     alert(
       'Could not load font data from /api/font: ' + err.message +
-      '\n\nRun `npm run glyph-editor` (or `node tools/glyph-editor/serve.js`) and open ' +
+      '\n\nRun `npm run glyph-editor` (or `node glyph-editor/serve.js`) and open ' +
       'this page at http://localhost:4000/ — opening the file directly will not work.'
     );
     return;
