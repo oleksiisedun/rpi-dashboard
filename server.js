@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -7,6 +8,26 @@ const PORT = process.env.PORT || 3000;
 // ─── Configuration ────────────────────────────────────────────────────────────
 
 const TOTP_SECRET = process.env.TOTP_SECRET || "YOUR_SECRET_KEY";
+const RANDOM_STRINGS_PATH = path.join(__dirname, ".strings");
+const RANDOM_STRING_DURATION_MS = 30000;
+
+/**
+ * Reads .strings and returns the non-empty, non-comment lines.
+ * @returns {string[]}
+ */
+function loadRandomStrings() {
+  let raw;
+  try {
+    raw = fs.readFileSync(RANDOM_STRINGS_PATH, "utf8");
+  } catch (e) {
+    console.warn(`[Display] Could not read ${RANDOM_STRINGS_PATH}: ${e.message}`);
+    return [];
+  }
+  return raw
+    .split("\n")
+    .map(line => line.trim())
+    .filter(line => line && !line.startsWith("#"));
+}
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
@@ -26,6 +47,10 @@ let displayState = {
   text: "",
   startedAt: null,
 };
+
+// Matrix settings from the last web UI submission — kept around (even after
+// stop/S8 overlay) so the S8 random-string feature can reuse them.
+let displaySettings = { speed: 40, brightness: 5, rotate: false, direction: "rtl" };
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -69,6 +94,7 @@ app.post("/api/display", (req, res) => {
     direction,
     startedAt: new Date().toISOString(),
   };
+  displaySettings = { speed, brightness, rotate, direction };
 
   console.log(`[Display] Starting loop: "${displayState.text}" dir=${direction} rotate=${rotate}`);
 
@@ -99,6 +125,46 @@ app.post("/api/display/stop", (req, res) => {
 app.get("/api/display/status", (req, res) => {
   res.json(displayState);
 });
+
+// ─── S8 button → random string overlay ─────────────────────────────────────────
+
+let s8RevertTimer = null;
+let s8PreOverlayState = null; // { active, text } captured just before the current overlay started
+
+/**
+ * Show a random line from .strings on the MAX7219 for
+ * RANDOM_STRING_DURATION_MS, using the current web UI matrix settings, then
+ * restore whatever was showing before (or stop if nothing was active).
+ * @returns {void}
+ */
+function handleS8Press() {
+  const strings = loadRandomStrings();
+  if (strings.length === 0) {
+    console.warn(`[Display] S8 pressed but ${RANDOM_STRINGS_PATH} has no strings`);
+    return;
+  }
+
+  if (!s8RevertTimer) {
+    s8PreOverlayState = { active: displayState.active, text: displayState.text };
+  }
+
+  const text = strings[Math.floor(Math.random() * strings.length)];
+  console.log(`[Display] S8 pressed — showing random string for 30s: "${text}"`);
+  display.startScroll(text, displaySettings);
+
+  clearTimeout(s8RevertTimer);
+  s8RevertTimer = setTimeout(() => {
+    s8RevertTimer = null;
+    if (s8PreOverlayState.active) {
+      display.startScroll(s8PreOverlayState.text, displaySettings);
+    } else {
+      display.stop();
+    }
+    s8PreOverlayState = null;
+  }, RANDOM_STRING_DURATION_MS);
+}
+
+keypad.onS8Press(handleS8Press);
 
 // ─── Cleanup on exit ──────────────────────────────────────────────────────────
 

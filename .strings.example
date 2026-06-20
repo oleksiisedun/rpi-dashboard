@@ -1,0 +1,7 @@
+# One message per line. Blank lines and lines starting with # are ignored.
+# Pressing S8 on the TM1638 picks one of these at random and scrolls it on
+# the MAX7219 for 30 seconds, using whatever speed/brightness/rotate/direction
+# is currently set in the web UI.
+Hello there!
+Have a great day
+:)

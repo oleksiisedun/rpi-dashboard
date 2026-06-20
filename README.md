@@ -4,7 +4,8 @@ Local Node.js web dashboard for Raspberry Pi with:
 - **2FA code generation** via `oathtool` (web UI button + physical S1 button)
 - **MAX7219 4×8×8 LED matrix** — scrolling text in Latin + Ukrainian Cyrillic
 - **TM1638 LED&KEY module** — press S1 to show the TOTP code on the 7-segment
-  digits for 10 seconds
+  digits for 10 seconds, or press S8 to scroll a random message from
+  `.strings` on the MAX7219 for 30 seconds
 
 ---
 
@@ -72,6 +73,7 @@ npm install
 ### 5. Run
 
 ```bash
+cp .strings.example .strings   # gitignored — edit with your own messages
 TOTP_SECRET=YOUR_ACTUAL_SECRET node server.js
 ```
 
@@ -85,6 +87,15 @@ Keypad:  ✅ TM1638 ready — press S1 to show TOTP
 
 Press **S1** on the TM1638 board — the TOTP code appears on the 7-segment
 digits for 10 seconds, then clears automatically.
+
+Press **S8** — a random line from `.strings` scrolls on the MAX7219
+for 30 seconds (using whatever speed/brightness/rotate/direction is currently
+set in the web UI), then the previous display state (or nothing, if it was
+stopped) resumes. `.strings` is gitignored (see step 5 above), so
+each machine keeps its own copy — edit it on your dev machine and push it
+with `npm run deploy` (it's not in `deploy.js`'s exclude list), or edit it
+directly on the Pi. One message per line; blank lines and lines starting
+with `#` are ignored.
 
 ---
 
@@ -154,8 +165,9 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 | `display.js` | MAX7219 driver (SPI, scrolling) |
 | `font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
-| `keypad.js` | S1 button → TOTP-on-digits behavior |
+| `keypad.js` | S1 button → TOTP-on-digits behavior; S8 button → random-string overlay (handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
+| `.strings.example` | Template for `.strings` (the gitignored, real one) — copy it per step 5 above |
 
 ---
 

@@ -5,6 +5,8 @@
  *
  * Behavior: pressing S1 generates a fresh TOTP code and shows it on the
  * 8 seven-segment digits for 10 seconds, then clears the display.
+ * Pressing S8 invokes a caller-supplied handler (see onS8Press) — used by
+ * server.js to show a random string on the MAX7219.
  */
 
 const { generateTOTP } = require("./totp");
@@ -91,13 +93,26 @@ async function handleS1Press() {
   }
 }
 
+// ── S8 press → caller-supplied handler ─────────────────────────────────────
+
+let s8Handler = null;
+
+/**
+ * Register a handler to invoke once per physical S8 press (rising edge).
+ * @param {() => void} handler
+ * @returns {void}
+ */
+function onS8Press(handler) {
+  s8Handler = handler;
+}
+
 // ── Button polling with edge detection (fires once per physical press) ────
 
 let lastButtons = 0;
 let pollHandle = null;
 
 /**
- * Read the button mask and fire handleS1Press once per physical S1 press (rising edge).
+ * Read the button mask and fire handlers once per physical button press (rising edge).
  * @returns {void}
  */
 function poll() {
@@ -111,7 +126,8 @@ function poll() {
   }
 
   const justPressed = buttons & ~lastButtons;
-  if (justPressed & 0x01) handleS1Press(); // bit0 = S1
+  if (justPressed & 0x01) handleS1Press();         // bit0 = S1
+  if (justPressed & 0x80) s8Handler && s8Handler(); // bit7 = S8
 
   lastButtons = buttons;
 }
@@ -137,4 +153,4 @@ function stop() {
 
 start();
 
-module.exports = { available, stop };
+module.exports = { available, stop, onS8Press };
