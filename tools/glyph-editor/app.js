@@ -393,20 +393,6 @@ document.getElementById('copyExportBtn').onclick = async () => {
 };
 
 /**
- * Downloads the generated export code as a standalone `font-export.js` file.
- * @returns {void}
- */
-document.getElementById('downloadBtn').onclick = () => {
-  if (!document.getElementById('exportTextarea').value) generateExport();
-  const blob = new Blob([document.getElementById('exportTextarea').value], { type: 'text/javascript' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'font-export.js';
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
-/**
  * Briefly swaps a button's label to give feedback, then restores it.
  * @param {string} id - Element id of the button.
  * @param {string} text - Temporary label to show.
