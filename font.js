@@ -80,91 +80,40 @@ for (let i = 0; i < LATIN_RAW.length; i++) {
 }
 
 // ── Ukrainian Cyrillic ────────────────────────────────────────────────────────
-//
-// All glyphs pixel-verified. Encoding: bit 0 = top row, bit 7 = bottom row.
-//
-// Key fixes vs previous version:
-//   Г  — horizontal bar at TOP, vertical on right  → [0x01,0x01,0x01,0x01,0x7F] was wrong order
-//   Ґ  — Г with uptick on bottom of right bar
-//   Д  — roof + two legs hanging below
-//   Л  — slanted left leg + right vertical (was mirrored Г)
-//   Т  — horizontal bar at top, vertical stem in center
-//   У  — two diagonal legs meeting in middle, tail going right-down
-//   Ф  — vertical stems + oval in center
-//   Ц  — Ш-like but with small foot on bottom-right
-//   Ч  — top-right hook + right vertical
-//   Щ  — Ш + small foot bottom-right
-//   Ї  — І with two dots at top (bits 0 and 2 on leftmost/rightmost columns)
 
 const CYR = {
-  // А — like Latin A but wider top
   'А': [0x7E,0x09,0x09,0x09,0x7E],
-  // Б — horizontal bar top, bump in middle, bar at bottom
   'Б': [0x7F,0x49,0x49,0x49,0x30],
-  // В — two bumps on the right (like B)
   'В': [0x7F,0x49,0x49,0x49,0x36],
-  // Г — vertical left + horizontal bar along top (Γ shape)
-  //      col0=full left bar, cols 1-4=only top bit lit
   'Г': [0x7F,0x01,0x01,0x00,0x00],
-  // Ґ — Г with a small uptick on the bottom of the right arm
   'Ґ': [0xFE,0x02,0x02,0x03,0x00],
-  // Д — triangle roof, two feet at bottom
-  //      Looks like: top bar, slanting sides, feet hanging out
   'Д': [0xC0,0x7F,0x41,0x7F,0xC0],
-  // Е — like E (left bar + 3 horizontal strokes)
   'Е': [0x7F,0x49,0x49,0x49,0x41],
-  // Є — open E facing left (like reversed C with middle bar)
   'Є': [0x3E,0x49,0x49,0x49,0x22],
-  // Ж — like two K back-to-back around a center vertical
   'Ж': [0x7F,0x08,0x7F,0x08,0x7F],
-  // З — like digit 3 / Z with curves
   'З': [0x41,0x49,0x49,0x49,0x36],
-  // И — like N mirrored
   'И': [0x7F,0x10,0x08,0x04,0x7F],
-  // І — single vertical bar (like Latin I but narrower)
   'І': [0x00,0x41,0x7F,0x41,0x00],
-  // Ї — І with two dots above (bits 0 = top row, on cols 0 and 4)
   'Ї': [0x00,0x45,0x7C,0x45,0x00],
-  // Й — И with a breve/tick on top
   'Й': [0xFC,0x11,0x09,0x05,0xFC],
-  // К — like Latin K
   'К': [0x7F,0x08,0x14,0x22,0x41],
-  // Л — slanted left leg + right vertical (like upside-down V + right bar)
-  //      col0=bottom-heavy slant, col4=full right bar
   'Л': [0x60,0x18,0x04,0x02,0x7F],
-  // М — two verticals + V in between
   'М': [0x7F,0x02,0x0C,0x02,0x7F],
-  // Н — like Latin H
   'Н': [0x7F,0x08,0x08,0x08,0x7F],
-  // О — like Latin O
   'О': [0x3E,0x41,0x41,0x41,0x3E],
-  // П — top bar + two vertical bars (like Π)
   'П': [0x7F,0x01,0x01,0x01,0x7F],
-  // Р — like Latin P
   'Р': [0x7F,0x09,0x09,0x09,0x06],
-  // С — like Latin C
   'С': [0x3E,0x41,0x41,0x41,0x22],
-  // Т — top bar + center vertical stem
   'Т': [0x01,0x01,0x7F,0x01,0x01],
-  // У — two legs joining at mid-height, right leg continues down
   'У': [0x03,0x04,0x78,0x04,0x03],
-  // Ф — vertical bars on sides + oval ring in center
   'Ф': [0x7E,0x42,0xFF,0x42,0x7E],
-  // Х — like Latin X
   'Х': [0x63,0x14,0x08,0x14,0x63],
-  // Ц — like U/Ш but with small descender foot on bottom-right
   'Ц': [0x7F,0x40,0x40,0x7F,0xC0],
-  // Ч — right-side vertical + horizontal hook at top-right
   'Ч': [0x0F,0x08,0x08,0x08,0x7F],
-  // Ш — three vertical bars joined at top
   'Ш': [0x7F,0x40,0x7F,0x40,0x7F],
-  // Щ — Ш + small descender foot on bottom-right
   'Щ': [0x7F,0x40,0x7F,0x40,0xFF],
-  // Ь — left vertical + half-oval on right (soft sign)
   'Ь': [0x7F,0x48,0x48,0x48,0x30],
-  // Ю — left vertical + O on right, connected by middle bar
   'Ю': [0x7F,0x08,0x3E,0x41,0x3E],
-  // Я — like reversed R
   'Я': [0x62,0x15,0x09,0x09,0x7F],
 };
 
@@ -184,7 +133,14 @@ Object.assign(FONT, CYR);
 // Glyphs outside Latin/Cyrillic (icons, arrows, etc.), added via tools/glyph-editor/.
 
 const CUSTOM = {
-  '❤': [0x18,0x3C,0x78,0x3C,0x18]
+  '❤': [0x18,0x3C,0x78,0x3C,0x18],
+  'o': [0x1C,0x22,0x22,0x22,0x1C],
+  'ﾉ': [0x40,0x40,0x20,0x10,0x0C],
+  '･': [0x00,0x18,0x18,0x00,0x00],
+  '★': [0x28,0x18,0x0C,0x18,0x28],
+  '╭': [0x00,0xE0,0x10,0x10,0x10],
+  '∩': [0x1E,0x01,0x01,0x01,0x1E],
+  '╮': [0x10,0x10,0x10,0xE0,0x00],
 };
 Object.assign(FONT, CUSTOM);
 
