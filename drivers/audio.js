@@ -61,7 +61,10 @@ function playRandom(folder) {
   const player = spawn("mpg123", ["-q", "-o", "pulse", filePath], { stdio: ["ignore", "ignore", "pipe"] });
   currentPlayer = player;
   player.stderr.on("data", d => console.error(`[Audio] mpg123: ${d.toString().trim()}`));
-  player.on("error", e => console.error("[Audio] playback error:", e.message));
+  player.on("error", e => {
+    console.error("[Audio] playback error:", e.message);
+    if (currentPlayer === player) currentPlayer = null;
+  });
   player.on("exit", code => {
     if (currentPlayer === player) currentPlayer = null;
     if (code !== 0 && !player.killedByUs) console.error(`[Audio] mpg123 exited with code ${code}`);
