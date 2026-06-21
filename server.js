@@ -129,6 +129,18 @@ app.post("/api/display", (req, res) => {
   if (typeof text !== "string" || text.trim() === "") {
     return res.status(400).json({ error: "text field is required." });
   }
+  if (typeof speed !== "number" || speed <= 0) {
+    return res.status(400).json({ error: "speed must be a positive number." });
+  }
+  if (typeof brightness !== "number" || brightness < 0 || brightness > 15) {
+    return res.status(400).json({ error: "brightness must be a number between 0 and 15." });
+  }
+  if (typeof rotate !== "boolean") {
+    return res.status(400).json({ error: "rotate must be a boolean." });
+  }
+  if (direction !== "rtl" && direction !== "ltr") {
+    return res.status(400).json({ error: "direction must be 'rtl' or 'ltr'." });
+  }
 
   cancelS8Revert();
 
