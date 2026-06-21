@@ -5,16 +5,20 @@
  *
  * Behavior: pressing S1 generates a fresh TOTP code and shows it on the
  * 8 seven-segment digits for 10 seconds, then clears the display.
+ * Pressing S7 plays a random sound from the sounds/ folder.
  * Pressing S8 invokes a caller-supplied handler (see onS8Press) — used by
  * server.js to show a random string on the MAX7219.
  */
 
+const path = require("path");
 const { generateTOTP } = require("./totp");
+const audio = require("./drivers/audio");
 const config = require("./config");
 
 const TOTP_SECRET = config.server.TOTP_SECRET;
 const SHOW_DURATION_MS = config.keypad.TOTP_SHOW_DURATION_MS;
 const POLL_INTERVAL_MS = config.keypad.POLL_INTERVAL_MS; // ~16 Hz — plenty fast for a human button press
+const SOUNDS_DIR = path.join(__dirname, "sounds");
 
 let tm = null;
 let available = false;
@@ -99,6 +103,17 @@ async function handleS1Press() {
   }
 }
 
+// ── S7 press → play random sound ───────────────────────────────────────────
+
+/**
+ * Play a random sound from SOUNDS_DIR.
+ * @returns {void}
+ */
+function handleS7Press() {
+  console.log("[Keypad] S7 pressed — playing random sound");
+  audio.playRandom(SOUNDS_DIR);
+}
+
 // ── S8 press → caller-supplied handler ─────────────────────────────────────
 
 let s8Handler = null;
@@ -133,6 +148,7 @@ function poll() {
 
   const justPressed = buttons & ~lastButtons;
   if (justPressed & 0x01) handleS1Press();         // bit0 = S1
+  if (justPressed & 0x40) handleS7Press();         // bit6 = S7
   if (justPressed & 0x80) s8Handler && s8Handler(); // bit7 = S8
 
   lastButtons = buttons;

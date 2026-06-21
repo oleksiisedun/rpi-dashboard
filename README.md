@@ -4,8 +4,9 @@ Local Node.js web dashboard for Raspberry Pi with:
 - **2FA code generation** via `oathtool` (web UI button + physical S1 button)
 - **MAX7219 4×8×8 LED matrix** — scrolling text in Latin + Ukrainian Cyrillic
 - **TM1638 LED&KEY module** — press S1 to show the TOTP code on the 7-segment
-  digits for 10 seconds, or press S8 to scroll a random message from
-  `.strings` on the MAX7219 for 30 seconds
+  digits for 10 seconds, press S7 to play a random sound from `sounds/`, or
+  press S8 to scroll a random message from `.strings` on the MAX7219 for
+  30 seconds
 
 ---
 
@@ -59,7 +60,7 @@ sudo usermod -a -G gpio pi
 
 ```bash
 sudo apt update
-sudo apt install oathtool nodejs npm build-essential
+sudo apt install oathtool mpg123 nodejs npm build-essential
 ```
 
 ### 4. Install Node dependencies
@@ -74,6 +75,7 @@ npm install
 
 ```bash
 cp .strings.example .strings   # gitignored — edit with your own messages
+mkdir -p sounds && cp /path/to/your/*.mp3 sounds/   # gitignored — add your own .mp3 files
 TOTP_SECRET=YOUR_ACTUAL_SECRET node server.js
 ```
 
@@ -87,6 +89,17 @@ Keypad:  ✅ TM1638 ready — press S1 to show TOTP
 
 Press **S1** on the TM1638 board — the TOTP code appears on the 7-segment
 digits for 10 seconds, then clears automatically.
+
+Press **S7** — a random `.mp3` from `sounds/` plays via `mpg123 -o pulse`,
+which routes through PipeWire/PulseAudio so it reaches whatever output is set
+as your default sink (3.5mm jack, HDMI, USB, or a paired Bluetooth speaker).
+That means the systemd service needs access to your user's PipeWire/Pulse
+session — see the `XDG_RUNTIME_DIR` note in "Auto-start with systemd" below,
+or sound will play correctly when you test `mpg123` by hand over SSH but
+stay silent when triggered by the service. `sounds/` is gitignored like
+`.strings` (see step 5 above), so each machine keeps its own files — add them
+on your dev machine and push with `npm run deploy` (it's not in `deploy.js`'s
+exclude list either), or copy them directly onto the Pi.
 
 Press **S8** — a random line from `.strings` scrolls on the MAX7219
 for 30 seconds (using whatever speed/brightness/rotate/direction is currently
@@ -116,12 +129,26 @@ ExecStart=/usr/bin/node server.js
 Restart=always
 User=pi
 Environment=TOTP_SECRET=YOUR_ACTUAL_SECRET
+Environment=XDG_RUNTIME_DIR=/run/user/1000
 
 [Install]
 WantedBy=multi-user.target
 ```
 
+`XDG_RUNTIME_DIR` (replace `1000` with the output of `id -u pi` if different)
+lets the S7 sound playback (`mpg123 -o pulse`, see `drivers/audio.js`) find
+your user's PipeWire/PulseAudio session — without it, `mpg123` exits cleanly
+but plays nothing, since it can't reach the socket that knows about your
+audio output (especially a Bluetooth speaker, which has no plain ALSA
+device). You also need that session to actually be running when the service
+starts, even without an interactive login:
+
 ```bash
+loginctl enable-linger pi
+```
+
+```bash
+sudo systemctl daemon-reload
 sudo systemctl enable rpi-dashboard
 sudo systemctl start rpi-dashboard
 ```
@@ -165,9 +192,11 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 | `drivers/display.js` | MAX7219 driver (SPI, scrolling) |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
-| `keypad.js` | S1 button → TOTP-on-digits behavior; S8 button → random-string overlay (handled in `server.js`) |
+| `drivers/audio.js` | `mpg123`-based random sound playback for the S7 button |
+| `keypad.js` | S1 button → TOTP-on-digits behavior; S7 button → random sound; S8 button → random-string overlay (handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
 | `.strings.example` | Template for `.strings` (the gitignored, real one) — copy it per step 5 above |
+| `sounds/` | Gitignored folder of `.mp3` files for the S7 button — create it per step 5 above |
 
 ---
 
@@ -175,4 +204,5 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 
 Both `drivers/display.js` and `drivers/tm1638.js`/`keypad.js` detect missing SPI/GPIO
 and fall back to stub/log mode, so you can develop on any machine
-without a Pi connected.
+without a Pi connected. `drivers/audio.js` follows the same pattern for a missing
+`mpg123` binary.
