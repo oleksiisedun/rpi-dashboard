@@ -63,6 +63,12 @@ async function main() {
     console.log(`Connecting to ${username}@${host}...`);
     await ssh.connect({ host, username, password });
 
+    // putDirectory only adds/overwrites files, it never deletes ones that no
+    // longer exist locally — without this, renamed/removed sound files pile
+    // up as stale cruft on the Pi across deploys.
+    console.log("Clearing remote sounds/ directory...");
+    await runRemote(ssh, `rm -rf "${remotePath}/sounds"`);
+
     console.log(`Uploading project to ${remotePath}...`);
     let uploadedCount = 0;
     const ok = await ssh.putDirectory(__dirname, remotePath, {
