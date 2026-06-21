@@ -167,10 +167,10 @@ class TM1638 {
   // ── Button reading ────────────────────────────────────────────────────────
 
   /**
-   * Read the key-scan registers and decode the pressed buttons.
+   * Perform one key-scan transaction and decode the pressed buttons.
    * @returns {number} 8-bit mask: bit0 = S1 ... bit7 = S8 (1 = pressed)
    */
-  getButtons() {
+  _scanButtons() {
     this._strobeLow();
     this._writeByte(0x42); // read key-scan command
 
@@ -193,6 +193,22 @@ class TM1638 {
       keys |= ((raw[i] >> 4) & 0x01) << (i + 4);
     }
     return keys;
+  }
+
+  /**
+   * Read the key-scan registers, retrying until two consecutive scans agree —
+   * a single bit-banged scan can occasionally misread a bit, which otherwise
+   * shows up as a button press silently not registering.
+   * @returns {number} 8-bit mask: bit0 = S1 ... bit7 = S8 (1 = pressed)
+   */
+  getButtons() {
+    let prev = this._scanButtons();
+    for (let i = 0; i < 3; i++) {
+      const next = this._scanButtons();
+      if (next === prev) return next;
+      prev = next;
+    }
+    return prev;
   }
 }
 
