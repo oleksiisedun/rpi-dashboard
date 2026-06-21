@@ -325,12 +325,12 @@
       if (data.active) {
         setStatus(`Looping: "${data.text}"`, true);
         document.getElementById('displayText').value = data.text;
-        if (data.speed)      document.getElementById('speedSlider').value = data.speed;
-        if (data.brightness) document.getElementById('brightSlider').value = data.brightness;
+        if (data.speed !== undefined)      document.getElementById('speedSlider').value = data.speed;
+        if (data.brightness !== undefined) document.getElementById('brightSlider').value = data.brightness;
         if (data.rotate)              document.getElementById('rotateCheck').checked = true;
         if (data.direction === 'ltr') document.getElementById('dirCheck').checked = true;
-        document.getElementById('speedVal').textContent  = (data.speed || 40) + ' ms/col';
-        document.getElementById('brightVal').textContent = (data.brightness || 5) + ' / 15';
+        document.getElementById('speedVal').textContent  = (data.speed ?? 40) + ' ms/col';
+        document.getElementById('brightVal').textContent = (data.brightness ?? 5) + ' / 15';
         document.getElementById('stopBtn').disabled = false;
       }
     } catch (_) {}
