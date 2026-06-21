@@ -183,10 +183,14 @@ class TM1638 {
     rpio.open(this.dio, rpio.OUTPUT, rpio.HIGH); // back to output
     this._strobeHigh();
 
+    // Each raw byte carries two buttons spaced 4 apart on this board's wiring
+    // (raw[i] low bit = S(i+1), high-nibble bit = S(i+5)) — NOT adjacent
+    // pairs S(2i+1)/S(2i+2) as the scan order might suggest. Confirmed by
+    // physically pressing each button and observing the resulting mask.
     let keys = 0;
     for (let i = 0; i < 4; i++) {
-      keys |= (raw[i] & 0x01) << (i * 2);
-      keys |= ((raw[i] >> 4) & 0x01) << (i * 2 + 1);
+      keys |= (raw[i] & 0x01) << i;
+      keys |= ((raw[i] >> 4) & 0x01) << (i + 4);
     }
     return keys;
   }
