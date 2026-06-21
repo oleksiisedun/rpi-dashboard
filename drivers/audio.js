@@ -14,6 +14,7 @@ const fs = require("fs");
 const path = require("path");
 
 let available = false;
+let currentPlayer = null;
 try {
   execSync("which mpg123", { stdio: "ignore" });
   available = true;
@@ -47,15 +48,23 @@ function playRandom(folder) {
     return;
   }
 
+  if (currentPlayer) {
+    currentPlayer.killedByUs = true;
+    currentPlayer.kill();
+    currentPlayer = null;
+  }
+
   console.log(`[Audio] playing ${file}`);
   // -o pulse: a Bluetooth speaker is only reachable through PipeWire/
   // PulseAudio, not as a raw ALSA hw device — the service also needs
   // XDG_RUNTIME_DIR set so it can find that session's socket (see README).
   const player = spawn("mpg123", ["-q", "-o", "pulse", filePath], { stdio: ["ignore", "ignore", "pipe"] });
+  currentPlayer = player;
   player.stderr.on("data", d => console.error(`[Audio] mpg123: ${d.toString().trim()}`));
   player.on("error", e => console.error("[Audio] playback error:", e.message));
   player.on("exit", code => {
-    if (code !== 0) console.error(`[Audio] mpg123 exited with code ${code}`);
+    if (currentPlayer === player) currentPlayer = null;
+    if (code !== 0 && !player.killedByUs) console.error(`[Audio] mpg123 exited with code ${code}`);
   });
 }
 
