@@ -3,8 +3,8 @@
 A small Node/Express app that turns a Raspberry Pi into a local network dashboard with three
 subsystems: TOTP 2FA code generation (via `oathtool`), a MAX7219 LED matrix scrolling-text
 display (SPI), and a TM1638 LED&KEY keypad (bit-banged GPIO) whose S1 button shows the TOTP
-code on the 7-segment digits, whose S6 and S7 buttons each play a random sound from their own
-folder (`sounds/S6/` and `sounds/S7/`, via `mpg123`), and whose S8 button shows a random string
+code on the 7-segment digits, whose S6 and S5 buttons each play a random sound from their own
+folder (`sounds/S6/` and `sounds/S5/`, via `mpg123`), and whose S8 button shows a random string
 from `.strings` on the MAX7219 for 60s. Every subsystem is designed to run identically whether or not the
 physical hardware is attached — see "Hardware-detection pattern" below. Hardware wiring and Pi
 setup steps live in `README.md`; this file is about the code.
@@ -19,10 +19,10 @@ setup steps live in `README.md`; this file is about the code.
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js` |
 | `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
 | `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3` |
-| `keypad.js` | Owns the `TM1638` instance, polls buttons every 60 ms, debounces button edges, shows TOTP on digits for 15s on S1, plays a random sound from `sounds/S6/` on S6 and `sounds/S7/` on S7, fires a registered callback on S8 (`onS8Press`) |
+| `keypad.js` | Owns the `TM1638` instance, polls buttons every 60 ms, debounces button edges, shows TOTP on digits for 15s on S1, plays a random sound from `sounds/S6/` on S6 and `sounds/S5/` on S5, fires a registered callback on S8 (`onS8Press`) |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
 | `.strings` | One message per line (blank/`#` lines ignored) — source for the S8 random-string overlay. Gitignored (per-machine content, like `.env`); `.strings.example` is the committed template |
-| `sounds/` | `S6/`/`S7/` subfolders of `.mp3` files for the S6/S7 random-sound buttons. Gitignored (per-machine content, like `.strings`) but not excluded from `deploy.js`, so it deploys normally |
+| `sounds/` | `S6/`/`S5/` subfolders of `.mp3` files for the S6/S5 random-sound buttons. Gitignored (per-machine content, like `.strings`) but not excluded from `deploy.js`, so it deploys normally |
 | `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` (per-machine runtime state, like `.env` — pushing the dev machine's copy would clobber the Pi's actual state) |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
 | `deploy.js` | Deployment script — pushes local code to the Pi over SSH and restarts the systemd service |
@@ -88,7 +88,10 @@ Runs on `:3000`. No test suite or linter is configured in this project.
 - `.strings` is gitignored but **not** in `deploy.js`'s exclude list, so it deploys
   normally — unlike `.env`, it's meant to reach the Pi, just not git.
 - `drivers/audio.js` requires the `mpg123` system binary on the Pi (`sudo apt install
-  mpg123`); if missing, S7 just logs a stub line instead of playing anything.
+  mpg123`); if missing, S5/S6 just log a stub line instead of playing anything.
+- S7 is not wired to anything — its physical switch/line tested as hardware-faulty (the chip
+  never reports it as pressed, even in raw key-scans below all debounce logic), so its
+  sound-button role was reassigned to S5.
 - `drivers/audio.js` invokes `mpg123 -o pulse` (not plain ALSA) because a Bluetooth speaker
   has no raw ALSA hw device — it's only reachable through PipeWire/PulseAudio. That means the
   systemd service needs `Environment=XDG_RUNTIME_DIR=/run/user/<uid>` and

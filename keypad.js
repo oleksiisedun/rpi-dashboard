@@ -5,8 +5,8 @@
  *
  * Behavior: pressing S1 generates a fresh TOTP code and shows it on the
  * 8 seven-segment digits for 15 seconds, then clears the display.
- * Pressing S6 plays a random sound from sounds/S6/; S7 plays a random sound
- * from sounds/S7/.
+ * Pressing S6 plays a random sound from sounds/S6/; S5 plays a random sound
+ * from sounds/S5/.
  * Pressing S8 invokes a caller-supplied handler (see onS8Press) — used by
  * server.js to show a random string on the MAX7219.
  */
@@ -20,7 +20,7 @@ const TOTP_SECRET = config.server.TOTP_SECRET;
 const SHOW_DURATION_MS = config.keypad.TOTP_SHOW_DURATION_MS;
 const POLL_INTERVAL_MS = config.keypad.POLL_INTERVAL_MS; // ~16 Hz — plenty fast for a human button press
 const SOUNDS_S6_DIR = path.join(__dirname, "sounds", "S6");
-const SOUNDS_S7_DIR = path.join(__dirname, "sounds", "S7");
+const SOUNDS_S5_DIR = path.join(__dirname, "sounds", "S5");
 
 let tm = null;
 let available = false;
@@ -105,7 +105,7 @@ async function handleS1Press() {
   }
 }
 
-// ── S6/S7 press → play random sound ────────────────────────────────────────
+// ── S6/S5 press → play random sound ────────────────────────────────────────
 
 /**
  * Play a random sound from SOUNDS_S6_DIR.
@@ -117,12 +117,12 @@ function handleS6Press() {
 }
 
 /**
- * Play a random sound from SOUNDS_S7_DIR.
+ * Play a random sound from SOUNDS_S5_DIR.
  * @returns {void}
  */
-function handleS7Press() {
-  console.log("[Keypad] S7 pressed — playing random sound");
-  audio.playRandom(SOUNDS_S7_DIR);
+function handleS5Press() {
+  console.log("[Keypad] S5 pressed — playing random sound");
+  audio.playRandom(SOUNDS_S5_DIR);
 }
 
 // ── S8 press → caller-supplied handler ─────────────────────────────────────
@@ -159,8 +159,8 @@ function poll() {
 
   const justPressed = buttons & ~lastButtons;
   if (justPressed & 0x01) handleS1Press();         // bit0 = S1
+  if (justPressed & 0x10) handleS5Press();         // bit4 = S5
   if (justPressed & 0x20) handleS6Press();         // bit5 = S6
-  if (justPressed & 0x40) handleS7Press();         // bit6 = S7
   if (justPressed & 0x80) s8Handler && s8Handler(); // bit7 = S8
 
   lastButtons = buttons;
