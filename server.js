@@ -130,6 +130,8 @@ app.post("/api/display", (req, res) => {
     return res.status(400).json({ error: "text field is required." });
   }
 
+  cancelS8Revert();
+
   displayState = {
     active: true,
     text: text.trim(),
@@ -157,6 +159,7 @@ app.post("/api/display", (req, res) => {
  */
 app.post("/api/display/stop", (req, res) => {
   console.log(`[Display] Stopping loop.`);
+  cancelS8Revert();
   display.stop();
   displayState = { active: false, text: "", startedAt: null };
   saveDisplayState(displayState, displaySettings);
@@ -177,6 +180,18 @@ app.get("/api/display/status", (req, res) => {
 
 let s8RevertTimer = null;
 let s8PreOverlayState = null; // { active, text } captured just before the current overlay started
+
+/**
+ * Cancel any pending S8 overlay revert, so a stale pre-overlay snapshot can't
+ * later clobber a display state set explicitly after the overlay started.
+ * @returns {void}
+ */
+function cancelS8Revert() {
+  if (!s8RevertTimer) return;
+  clearTimeout(s8RevertTimer);
+  s8RevertTimer = null;
+  s8PreOverlayState = null;
+}
 
 /**
  * Show a random line from .strings on the MAX7219 for
