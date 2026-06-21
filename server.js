@@ -66,7 +66,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const { generateTOTP } = require("./totp");
 const display = require("./drivers/display");
-const keypad  = require("./keypad"); // S1 button → shows TOTP on 7-segment for 10s
+const keypad  = require("./keypad"); // S1 button → shows TOTP on 7-segment for 15s
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -196,7 +196,7 @@ function handleS8Press() {
   }
 
   const text = strings[Math.floor(Math.random() * strings.length)];
-  console.log(`[Display] S8 pressed — showing random string for 30s: "${text}"`);
+  console.log(`[Display] S8 pressed — showing random string for ${RANDOM_STRING_DURATION_MS / 1000}s: "${text}"`);
   display.startScroll(text, displaySettings);
 
   clearTimeout(s8RevertTimer);

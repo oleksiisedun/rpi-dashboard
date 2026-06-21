@@ -4,7 +4,7 @@
  * keypad.js — TM1638 LED&KEY integration.
  *
  * Behavior: pressing S1 generates a fresh TOTP code and shows it on the
- * 8 seven-segment digits for 10 seconds, then clears the display.
+ * 8 seven-segment digits for 15 seconds, then clears the display.
  * Pressing S6 plays a random sound from sounds/S6/; S7 plays a random sound
  * from sounds/S7/.
  * Pressing S8 invokes a caller-supplied handler (see onS8Press) — used by
