@@ -24,6 +24,17 @@ try {
 }
 
 /**
+ * Spawn the queued pending track, if any, clearing it first.
+ * @returns {void}
+ */
+function playPending() {
+  if (!pending) return;
+  const next = pending;
+  pending = null;
+  spawnPlayer(next.filePath, next.file);
+}
+
+/**
  * Spawn mpg123 for a file and wire up its lifecycle handlers.
  * @param {string} filePath - absolute path to the .mp3 file
  * @param {string} file - basename, for logging
@@ -40,15 +51,12 @@ function spawnPlayer(filePath, file) {
   player.on("error", e => {
     console.error("[Audio] playback error:", e.message);
     if (currentPlayer === player) currentPlayer = null;
+    playPending();
   });
   player.on("exit", code => {
     if (currentPlayer === player) currentPlayer = null;
     if (code !== 0 && !player.killedByUs) console.error(`[Audio] mpg123 exited with code ${code}`);
-    if (pending) {
-      const next = pending;
-      pending = null;
-      spawnPlayer(next.filePath, next.file);
-    }
+    playPending();
   });
 }
 
