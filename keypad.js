@@ -7,11 +7,16 @@
  * 8 seven-segment digits for 15 seconds, then clears the display.
  * Pressing S6 plays a random sound from sounds/S6/; S5 plays a random sound
  * from sounds/S5/.
+ * Pressing S7 restarts the rpi-dashboard systemd service. S7's switch
+ * previously tested as hardware-faulty (see README's sudoers setup step for
+ * why this needs a NOPASSWD rule) — wired anyway in case that's since
+ * changed, since a faulty switch just means the handler never fires.
  * Pressing S8 invokes a caller-supplied handler (see onS8Press) — used by
  * server.js to show a random string on the MAX7219.
  */
 
 const path = require("path");
+const { execFile } = require("child_process");
 const { generateTOTP } = require("./totp");
 const audio = require("./drivers/audio");
 const config = require("./config");
@@ -125,6 +130,21 @@ function handleS5Press() {
   audio.playRandom(SOUNDS_S5_DIR);
 }
 
+// ── S7 press → restart the rpi-dashboard service ───────────────────────────
+
+/**
+ * Restart the rpi-dashboard systemd service via sudo. Requires a NOPASSWD
+ * sudoers rule for this exact command (see README) since the running
+ * service has no interactive stdin to supply a password.
+ * @returns {void}
+ */
+function handleS7Press() {
+  console.log("[Keypad] S7 pressed — restarting rpi-dashboard service");
+  execFile("sudo", ["systemctl", "restart", "rpi-dashboard"], (err) => {
+    if (err) console.error("[Keypad] restart failed:", err.message);
+  });
+}
+
 // ── S8 press → caller-supplied handler ─────────────────────────────────────
 
 let s8Handler = null;
@@ -161,6 +181,7 @@ function poll() {
   if (justPressed & 0x01) handleS1Press();         // bit0 = S1
   if (justPressed & 0x10) handleS5Press();         // bit4 = S5
   if (justPressed & 0x20) handleS6Press();         // bit5 = S6
+  if (justPressed & 0x40) handleS7Press();         // bit6 = S7
   if (justPressed & 0x80) s8Handler && s8Handler(); // bit7 = S8
 
   lastButtons = buttons;
