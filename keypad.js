@@ -13,6 +13,8 @@
  * changed, since a faulty switch just means the handler never fires.
  * Pressing S8 invokes a caller-supplied handler (see onS8Press) — used by
  * server.js to show a random string on the MAX7219.
+ * Each LED (1-8) mirrors its corresponding button's held state, lighting up
+ * while Si is pressed and turning off on release.
  */
 
 const path = require("path");
@@ -164,6 +166,19 @@ let lastButtons = 0;
 let pollHandle = null;
 
 /**
+ * Sync each LED to its button's held state, touching only the LEDs whose
+ * button state changed since the last poll.
+ * @param {number} buttons - current button mask
+ * @returns {void}
+ */
+function updateLEDs(buttons) {
+  const changed = buttons ^ lastButtons;
+  for (let i = 0; i < 8; i++) {
+    if (changed & (1 << i)) tm.setLED(i, !!(buttons & (1 << i)));
+  }
+}
+
+/**
  * Read the button mask and fire handlers once per physical button press (rising edge).
  * @returns {void}
  */
@@ -176,6 +191,8 @@ function poll() {
     console.error("[Keypad] read error:", e.message);
     return;
   }
+
+  updateLEDs(buttons);
 
   const justPressed = buttons & ~lastButtons;
   if (justPressed & 0x01) handleS1Press();         // bit0 = S1
