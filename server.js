@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const config = require("./config");
 
 const app = express();
@@ -10,7 +11,7 @@ const PORT = config.server.PORT;
 
 const TOTP_SECRET = config.server.TOTP_SECRET;
 const RANDOM_STRINGS_PATH = path.join(__dirname, ".strings");
-const RANDOM_STRING_DURATION_MS = config.display.RANDOM_STRING_DURATION_MS;
+const OVERLAY_DURATION_MS = config.display.OVERLAY_DURATION_MS;
 const DISPLAY_STATE_PATH = path.join(__dirname, ".display-state.json");
 
 /**
@@ -77,7 +78,7 @@ let displayState = {
 };
 
 // Matrix settings from the last web UI submission — kept around (even after
-// stop/S8 overlay) so the S8 random-string feature can reuse them.
+// stop/overlay) so the S2/S8 overlay features can reuse them.
 let displaySettings = {
   speed: config.display.DEFAULT_SPEED_MS,
   brightness: config.display.DEFAULT_BRIGHTNESS,
@@ -142,7 +143,7 @@ app.post("/api/display", (req, res) => {
     return res.status(400).json({ error: "direction must be 'rtl' or 'ltr'." });
   }
 
-  cancelS8Revert();
+  cancelOverlayRevert();
 
   displayState = {
     active: true,
@@ -171,7 +172,7 @@ app.post("/api/display", (req, res) => {
  */
 app.post("/api/display/stop", (req, res) => {
   console.log(`[Display] Stopping loop.`);
-  cancelS8Revert();
+  cancelOverlayRevert();
   display.stop();
   displayState = { active: false, text: "", startedAt: null };
   saveDisplayState(displayState, displaySettings);
@@ -188,27 +189,83 @@ app.get("/api/display/status", (req, res) => {
   res.json(displayState);
 });
 
-// ─── S8 button → random string overlay ─────────────────────────────────────────
+// ─── S2/S8 buttons → temporary matrix overlays ─────────────────────────────────
 
-let s8RevertTimer = null;
-let s8PreOverlayState = null; // { active, text } captured just before the current overlay started
+let overlayRevertTimer = null;
+let preOverlayState = null; // { active, text } captured just before the current overlay started
 
 /**
- * Cancel any pending S8 overlay revert, so a stale pre-overlay snapshot can't
+ * Cancel any pending overlay revert, so a stale pre-overlay snapshot can't
  * later clobber a display state set explicitly after the overlay started.
  * @returns {void}
  */
-function cancelS8Revert() {
-  if (!s8RevertTimer) return;
-  clearTimeout(s8RevertTimer);
-  s8RevertTimer = null;
-  s8PreOverlayState = null;
+function cancelOverlayRevert() {
+  if (!overlayRevertTimer) return;
+  clearTimeout(overlayRevertTimer);
+  overlayRevertTimer = null;
+  preOverlayState = null;
 }
 
 /**
- * Show a random line from .strings on the MAX7219 for
- * RANDOM_STRING_DURATION_MS, using the current web UI matrix settings, then
- * restore whatever was showing before (or stop if nothing was active).
+ * Show text on the MAX7219 for OVERLAY_DURATION_MS, using the current web UI
+ * matrix settings, then restore whatever was showing before (or stop if
+ * nothing was active). Shared by the S2 (LAN IP) and S8 (random string)
+ * overlays.
+ * @param {string} text
+ * @returns {void}
+ */
+function showOverlay(text) {
+  if (!overlayRevertTimer) {
+    preOverlayState = { active: displayState.active, text: displayState.text };
+  }
+
+  display.startScroll(text, displaySettings);
+
+  clearTimeout(overlayRevertTimer);
+  overlayRevertTimer = setTimeout(() => {
+    overlayRevertTimer = null;
+    if (preOverlayState.active) {
+      display.startScroll(preOverlayState.text, displaySettings);
+    } else {
+      display.stop();
+    }
+    preOverlayState = null;
+  }, OVERLAY_DURATION_MS);
+}
+
+/**
+ * Returns this machine's first non-internal IPv4 LAN address, or null if none
+ * is found (e.g. no network connected).
+ * @returns {string|null}
+ */
+function getLanIp() {
+  const interfaces = os.networkInterfaces();
+  for (const ifaceList of Object.values(interfaces)) {
+    for (const iface of ifaceList) {
+      if (iface.family === "IPv4" && !iface.internal) return iface.address;
+    }
+  }
+  return null;
+}
+
+/**
+ * Show this machine's LAN IP and port on the MAX7219 for OVERLAY_DURATION_MS.
+ * @returns {void}
+ */
+function handleS2Press() {
+  const ip = getLanIp();
+  if (!ip) {
+    console.warn("[Display] S2 pressed but no LAN IP address was found");
+    return;
+  }
+
+  const text = `${ip}:${PORT}`;
+  console.log(`[Display] S2 pressed — showing IP for ${OVERLAY_DURATION_MS / 1000}s: "${text}"`);
+  showOverlay(text);
+}
+
+/**
+ * Show a random line from .strings on the MAX7219 for OVERLAY_DURATION_MS.
  * @returns {void}
  */
 function handleS8Press() {
@@ -218,26 +275,12 @@ function handleS8Press() {
     return;
   }
 
-  if (!s8RevertTimer) {
-    s8PreOverlayState = { active: displayState.active, text: displayState.text };
-  }
-
   const text = strings[Math.floor(Math.random() * strings.length)];
-  console.log(`[Display] S8 pressed — showing random string for ${RANDOM_STRING_DURATION_MS / 1000}s: "${text}"`);
-  display.startScroll(text, displaySettings);
-
-  clearTimeout(s8RevertTimer);
-  s8RevertTimer = setTimeout(() => {
-    s8RevertTimer = null;
-    if (s8PreOverlayState.active) {
-      display.startScroll(s8PreOverlayState.text, displaySettings);
-    } else {
-      display.stop();
-    }
-    s8PreOverlayState = null;
-  }, RANDOM_STRING_DURATION_MS);
+  console.log(`[Display] S8 pressed — showing random string for ${OVERLAY_DURATION_MS / 1000}s: "${text}"`);
+  showOverlay(text);
 }
 
+keypad.onS2Press(handleS2Press);
 keypad.onS8Press(handleS8Press);
 
 // ─── Restore display state from before the last restart ───────────────────────
