@@ -67,6 +67,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const { generateTOTP } = require("./totp");
 const display = require("./drivers/display");
+const { CUSTOM } = require("./drivers/font");
 const keypad  = require("./keypad"); // S1 button → shows TOTP on 7-segment for 15s
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -187,6 +188,16 @@ app.post("/api/display/stop", (req, res) => {
  */
 app.get("/api/display/status", (req, res) => {
   res.json(displayState);
+});
+
+/**
+ * GET /api/custom-symbols — returns the literal characters available in font.js's CUSTOM set.
+ * @param {express.Request} req
+ * @param {express.Response} res
+ * @returns {void}
+ */
+app.get("/api/custom-symbols", (req, res) => {
+  res.json({ symbols: Object.keys(CUSTOM) });
 });
 
 // ─── S2/S8 buttons → temporary matrix overlays ─────────────────────────────────

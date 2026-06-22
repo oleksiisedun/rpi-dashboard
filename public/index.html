@@ -133,6 +133,15 @@
       border-color: var(--accent); color: var(--accent);
     }
 
+    .symbol-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .symbol-chip {
+      font-family: var(--mono); font-size: 15px; line-height: 1;
+      width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
+      color: var(--text); cursor: pointer; transition: border-color 0.15s, color 0.15s;
+    }
+    .symbol-chip:hover { border-color: var(--accent); color: var(--accent); }
+
     .display-status {
       margin-top: 14px; padding: 10px 14px;
       background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
@@ -227,6 +236,9 @@
           </label>
         </div>
 
+        <div class="field-label" style="margin-top:14px;">Custom symbols (click to insert)</div>
+        <div class="symbol-row" id="symbolRow"></div>
+
         <div class="display-status">
           <div class="status-dot" id="statusDot"></div>
           <span id="statusText">Idle</span>
@@ -317,6 +329,33 @@
     document.getElementById('statusText').textContent = msg;
     document.getElementById('statusDot').className = 'status-dot' + (active ? ' active' : '');
   }
+
+  function insertSymbol(sym) {
+    const ta    = document.getElementById('displayText');
+    const start = ta.selectionStart ?? ta.value.length;
+    const end   = ta.selectionEnd ?? ta.value.length;
+    ta.value = ta.value.slice(0, start) + sym + ta.value.slice(end);
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = start + sym.length;
+  }
+
+  async function loadCustomSymbols() {
+    try {
+      const res  = await fetch('/api/custom-symbols');
+      const data = await res.json();
+      const row  = document.getElementById('symbolRow');
+      row.innerHTML = '';
+      for (const sym of data.symbols) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'symbol-chip';
+        chip.textContent = sym;
+        chip.onclick = () => insertSymbol(sym);
+        row.appendChild(chip);
+      }
+    } catch (_) {}
+  }
+  loadCustomSymbols();
 
   (async () => {
     try {
