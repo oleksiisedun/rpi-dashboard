@@ -3,10 +3,11 @@
 A small Node/Express app that turns a Raspberry Pi into a local network dashboard with three
 subsystems: TOTP 2FA code generation (via `oathtool`), a MAX7219 LED matrix scrolling-text
 display (SPI), and a TM1638 LED&KEY keypad (bit-banged GPIO) whose S1 button shows the TOTP
-code on the 7-segment digits, whose S6 and S5 buttons each play a random sound from their own
+code on the 7-segment digits, whose S2 button shows the Pi's LAN IP and port on the MAX7219,
+whose S6 and S5 buttons each play a random sound from their own
 folder (`sounds/S6/` and `sounds/S5/`, via `mpg123`), whose S7 button restarts the
 `rpi-dashboard` systemd service, and whose S8 button shows a random string
-from `.strings` on the MAX7219 for 60s. Every subsystem is designed to run identically whether or not the
+from `.strings` on the MAX7219 (all show/display durations are tunable in `config.js`). Every subsystem is designed to run identically whether or not the
 physical hardware is attached — see "Hardware-detection pattern" below. Hardware wiring and Pi
 setup steps live in `README.md`; this file is about the code.
 
@@ -20,7 +21,7 @@ setup steps live in `README.md`; this file is about the code.
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js` |
 | `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
 | `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3` |
-| `keypad.js` | Owns the `TM1638` instance, polls buttons every 60 ms, debounces button edges, shows TOTP on digits for 15s on S1, plays a random sound from `sounds/S6/` on S6 and `sounds/S5/` on S5, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires a registered callback on S8 (`onS8Press`) |
+| `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows TOTP on digits on S1 for `TOTP_SHOW_DURATION_MS`, plays a random sound from `sounds/S6/` on S6 and `sounds/S5/` on S5, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S8 (`onS8Press`) |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
 | `.strings` | One message per line (blank/`#` lines ignored) — source for the S8 random-string overlay. Gitignored (per-machine content, like `.env`); `.strings.example` is the committed template |
 | `sounds/` | `S6/`/`S5/` subfolders of `.mp3` files for the S6/S5 random-sound buttons. Gitignored (per-machine content, like `.strings`) but not excluded from `deploy.js`, so it deploys normally |

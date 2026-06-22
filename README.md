@@ -4,10 +4,11 @@ Local Node.js web dashboard for Raspberry Pi with:
 - **2FA code generation** via `oathtool` (web UI button + physical S1 button)
 - **MAX7219 4×8×8 LED matrix** — scrolling text in Latin + Ukrainian Cyrillic
 - **TM1638 LED&KEY module** — press S1 to show the TOTP code on the 7-segment
-  digits for 10 seconds, press S6 or S5 to play a random sound from
-  `sounds/S6/` or `sounds/S5/` respectively, press S7 to restart the
-  rpi-dashboard service, or press S8 to scroll a random message from
-  `.strings` on the MAX7219 for 30 seconds
+  digits, press S2 to scroll this machine's LAN IP and port on the MAX7219,
+  press S6 or S5 to play a random sound from `sounds/S6/` or `sounds/S5/`
+  respectively, press S7 to restart the rpi-dashboard service, or press S8 to
+  scroll a random message from `.strings` on the MAX7219 (display/show
+  durations are tunable in `config.js`)
 
 ---
 
@@ -91,7 +92,13 @@ Keypad:  ✅ TM1638 ready — press S1 to show TOTP
 ```
 
 Press **S1** on the TM1638 board — the TOTP code appears on the 7-segment
-digits for 10 seconds, then clears automatically.
+digits, then clears automatically after `config.js`'s `TOTP_SHOW_DURATION_MS`.
+
+Press **S2** — this machine's LAN IP and port (e.g. `192.168.0.141:3000`)
+scrolls on the MAX7219 (using whatever speed/brightness/rotate/direction is
+currently set in the web UI) for `config.js`'s `OVERLAY_DURATION_MS`, then the
+previous display state (or nothing, if it was stopped) resumes. Useful since
+the Pi uses DHCP and its IP can change between boots.
 
 Press **S6** or **S5** — a random `.mp3` from `sounds/S6/` or `sounds/S5/`
 (respectively) plays via `mpg123 -o pulse`, which routes through
@@ -112,10 +119,10 @@ with no interactive stdin. This requires a NOPASSWD sudoers rule (see
 an error is logged. S7's switch is flaky — try a different press angle.
 
 Press **S8** — a random line from `.strings` scrolls on the MAX7219
-for 30 seconds (using whatever speed/brightness/rotate/direction is currently
-set in the web UI), then the previous display state (or nothing, if it was
-stopped) resumes. `.strings` is gitignored (see step 5 above), so
-each machine keeps its own copy — edit it on your dev machine and push it
+(using whatever speed/brightness/rotate/direction is currently set in the web
+UI) for `config.js`'s `OVERLAY_DURATION_MS`, then the previous display state
+(or nothing, if it was stopped) resumes. `.strings` is gitignored (see step 5
+above), so each machine keeps its own copy — edit it on your dev machine and push it
 with `npm run deploy` (it's not in `deploy.js`'s exclude list), or edit it
 directly on the Pi. One message per line; blank lines and lines starting
 with `#` are ignored.
@@ -219,7 +226,7 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
 | `drivers/audio.js` | `mpg123`-based random sound playback for the S6/S5 buttons |
-| `keypad.js` | S1 button → TOTP-on-digits behavior; S6/S5 buttons → random sound; S7 button → service restart; S8 button → random-string overlay (handled in `server.js`) |
+| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S6/S5 buttons → random sound; S7 button → service restart; S8 button → random-string overlay (S2/S8 overlays handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
 | `.strings.example` | Template for `.strings` (the gitignored, real one) — copy it per step 5 above |
 | `sounds/` | Gitignored folder with `S6/`/`S5/` subfolders of `.mp3` files for the S6/S5 buttons — create per step 5 above |
