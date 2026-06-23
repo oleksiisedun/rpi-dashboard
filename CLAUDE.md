@@ -18,7 +18,7 @@ setup steps live in `README.md`; this file is about the code.
 | `config.js` | Single place for tunable values (durations, intervals, default display settings, GPIO pins, ports, secret defaults, deploy path/exclusions) used by `server.js`/`display.js`/`keypad.js`/`deploy.js`. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
 | `server.js` | Express app, all HTTP routes, in-memory `displayState`/`displaySettings` (persisted to `.display-state.json` and restored on boot), S8 random-string overlay handler, SIGINT/SIGTERM cleanup |
 | `drivers/display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop |
-| `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js` |
+| `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js`; its `CUSTOM` export is also read directly by `server.js` for the `/api/custom-symbols` route |
 | `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
 | `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3` |
 | `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows TOTP on digits on S1 for `TOTP_SHOW_DURATION_MS`, plays a random sound from `sounds/S6/` on S6 and `sounds/S5/` on S5, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S8 (`onS8Press`) |
@@ -28,7 +28,7 @@ setup steps live in `README.md`; this file is about the code.
 | `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` (per-machine runtime state, like `.env` — pushing the dev machine's copy would clobber the Pi's actual state) |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
 | `deploy.js` | Deployment script — pushes local code to the Pi over SSH and restarts the systemd service |
-| `glyph-editor/` | Dev-only glyph design tool for `drivers/font.js` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `drivers/font.js` live and serves it over `/api/font`) — not part of the deployed app |
+| `glyph-editor/` | Dev-only glyph design tool for `drivers/font.js`, run via `npm run glyph-editor` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `drivers/font.js` live and serves it over `/api/font`) — not part of the deployed app |
 
 ## Hardware-detection pattern
 
@@ -71,6 +71,7 @@ Runs on `:3000`. No test suite or linter is configured in this project.
 | POST | `/api/display` | `{ text, speed?, brightness?, rotate?, direction? }` | Start scroll loop |
 | POST | `/api/display/stop` | — | Stop + clear MAX7219 display |
 | GET  | `/api/display/status` | — | Current MAX7219 state |
+| GET  | `/api/custom-symbols` | — | Returns `{ symbols }` — the literal characters in `font.js`'s `CUSTOM` set, for the frontend's symbol picker |
 
 ## Known constraints / gotchas
 
