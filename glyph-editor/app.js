@@ -42,8 +42,8 @@ async function loadFontData() {
     return;
   }
 
-  LATIN_CHARS = Array.from({ length: data.LATIN_RAW.length }, (_, i) => String.fromCharCode(32 + i));
-  LATIN_CHARS.forEach((ch, i) => { font[ch] = [...data.LATIN_RAW[i]]; });
+  LATIN_CHARS = Object.keys(data.LATIN);
+  LATIN_CHARS.forEach(ch => { font[ch] = [...data.LATIN[ch]]; });
 
   CYRILLIC_CHARS = Object.keys(data.CYR);
   CYRILLIC_CHARS.forEach(ch => { font[ch] = [...data.CYR[ch]]; });

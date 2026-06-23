@@ -1,7 +1,7 @@
 "use strict";
 
 const express = require("express");
-const { LATIN_RAW, CYR, CUSTOM, UNKNOWN_GLYPH } = require("../drivers/font.js");
+const { LATIN, CYR, CUSTOM, UNKNOWN_GLYPH } = require("../drivers/font.js");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -16,7 +16,7 @@ app.use(express.static(__dirname));
  * @returns {void}
  */
 app.get("/api/font", (req, res) => {
-  res.json({ LATIN_RAW, CYR, CUSTOM, UNKNOWN_GLYPH });
+  res.json({ LATIN, CYR, CUSTOM, UNKNOWN_GLYPH });
 });
 
 app.listen(PORT, () => {
