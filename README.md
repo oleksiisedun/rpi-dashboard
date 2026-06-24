@@ -5,8 +5,8 @@ Local Node.js web dashboard for Raspberry Pi with:
 - **MAX7219 4×8×8 LED matrix** — scrolling text in Latin + Ukrainian Cyrillic
 - **TM1638 LED&KEY module** — press S1 to show the TOTP code on the 7-segment
   digits, press S2 to scroll this machine's LAN IP and port on the MAX7219,
-  press S6 or S5 to play a random sound from `sounds/S6/` or `sounds/S5/`
-  respectively, press S7 to restart the rpi-dashboard service, or press S8 to
+  press S4, S5, or S6 to play a random sound from `sounds/S4/`, `sounds/S5/`,
+  or `sounds/S6/` respectively, press S7 to restart the rpi-dashboard service, or press S8 to
   scroll a random message from `.strings` on the MAX7219 (display/show
   durations are tunable in `config.js`)
 
@@ -77,9 +77,10 @@ npm install
 
 ```bash
 cp .strings.example .strings   # gitignored — edit with your own messages
-mkdir -p sounds/S6 sounds/S5   # gitignored — add your own .mp3 files to each
-cp /path/to/your/s6-sounds/*.mp3 sounds/S6/
+mkdir -p sounds/S4 sounds/S5 sounds/S6   # gitignored — add your own .mp3 files to each
+cp /path/to/your/s4-sounds/*.mp3 sounds/S4/
 cp /path/to/your/s5-sounds/*.mp3 sounds/S5/
+cp /path/to/your/s6-sounds/*.mp3 sounds/S6/
 TOTP_SECRET=YOUR_ACTUAL_SECRET node server.js
 ```
 
@@ -100,8 +101,8 @@ currently set in the web UI) for `config.js`'s `OVERLAY_DURATION_MS`, then the
 previous display state (or nothing, if it was stopped) resumes. Useful since
 the Pi uses DHCP and its IP can change between boots.
 
-Press **S6** or **S5** — a random `.mp3` from `sounds/S6/` or `sounds/S5/`
-(respectively) plays via `mpg123 -o pulse`, which routes through
+Press **S4**, **S5**, or **S6** — a random `.mp3` from `sounds/S4/`, `sounds/S5/`, or
+`sounds/S6/` (respectively) plays via `mpg123 -o pulse`, which routes through
 PipeWire/PulseAudio so it reaches whatever output is set as your default sink
 (3.5mm jack, HDMI, USB, or a paired Bluetooth speaker). That means the
 systemd service needs access to your user's PipeWire/Pulse session — see the
@@ -153,7 +154,7 @@ WantedBy=multi-user.target
 ```
 
 `XDG_RUNTIME_DIR` (replace `1000` with the output of `id -u pi` if different)
-lets the S6/S5 sound playback (`mpg123 -o pulse`, see `drivers/audio.js`) find
+lets the S4/S5/S6 sound playback (`mpg123 -o pulse`, see `drivers/audio.js`) find
 your user's PipeWire/PulseAudio session — without it, `mpg123` exits cleanly
 but plays nothing, since it can't reach the socket that knows about your
 audio output (especially a Bluetooth speaker, which has no plain ALSA
@@ -225,11 +226,11 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 | `drivers/display.js` | MAX7219 driver (SPI, scrolling) |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
-| `drivers/audio.js` | `mpg123`-based random sound playback for the S6/S5 buttons |
-| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S6/S5 buttons → random sound; S7 button → service restart; S8 button → random-string overlay (S2/S8 overlays handled in `server.js`) |
+| `drivers/audio.js` | `mpg123`-based random sound playback for the S4/S5/S6 buttons |
+| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S4/S5/S6 buttons → random sound; S7 button → service restart; S8 button → random-string overlay (S2/S8 overlays handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
 | `.strings.example` | Template for `.strings` (the gitignored, real one) — copy it per step 5 above |
-| `sounds/` | Gitignored folder with `S6/`/`S5/` subfolders of `.mp3` files for the S6/S5 buttons — create per step 5 above |
+| `sounds/` | Gitignored folder with `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 buttons — create per step 5 above |
 
 ---
 

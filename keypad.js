@@ -5,8 +5,8 @@
  *
  * Behavior: pressing S1 generates a fresh TOTP code and shows it on the
  * 8 seven-segment digits for 15 seconds, then clears the display.
- * Pressing S6 plays a random sound from sounds/S6/; S5 plays a random sound
- * from sounds/S5/.
+ * Pressing S4, S5, or S6 plays a random sound from its own folder
+ * (sounds/S4/, sounds/S5/, sounds/S6/ respectively).
  * Pressing S7 restarts the rpi-dashboard systemd service. S7's switch
  * previously tested as hardware-faulty (see README's sudoers setup step for
  * why this needs a NOPASSWD rule) — wired anyway in case that's since
@@ -28,6 +28,7 @@ const SHOW_DURATION_MS = config.keypad.TOTP_SHOW_DURATION_MS;
 const POLL_INTERVAL_MS = config.keypad.POLL_INTERVAL_MS; // ~16 Hz — plenty fast for a human button press
 const SOUNDS_S6_DIR = path.join(__dirname, "sounds", "S6");
 const SOUNDS_S5_DIR = path.join(__dirname, "sounds", "S5");
+const SOUNDS_S4_DIR = path.join(__dirname, "sounds", "S4");
 
 let tm = null;
 let available = false;
@@ -112,7 +113,7 @@ async function handleS1Press() {
   }
 }
 
-// ── S6/S5 press → play random sound ────────────────────────────────────────
+// ── S6/S5/S4 press → play random sound ──────────────────────────────────────
 
 /**
  * Play a random sound from SOUNDS_S6_DIR.
@@ -130,6 +131,15 @@ function handleS6Press() {
 function handleS5Press() {
   console.log("[Keypad] S5 pressed — playing random sound");
   audio.playRandom(SOUNDS_S5_DIR);
+}
+
+/**
+ * Play a random sound from SOUNDS_S4_DIR.
+ * @returns {void}
+ */
+function handleS4Press() {
+  console.log("[Keypad] S4 pressed — playing random sound");
+  audio.playRandom(SOUNDS_S4_DIR);
 }
 
 // ── S7 press → restart the rpi-dashboard service ───────────────────────────
@@ -207,6 +217,7 @@ function poll() {
   const justPressed = buttons & ~lastButtons;
   if (justPressed & 0x01) handleS1Press();         // bit0 = S1
   if (justPressed & 0x02) s2Handler && s2Handler(); // bit1 = S2
+  if (justPressed & 0x08) handleS4Press();         // bit3 = S4
   if (justPressed & 0x10) handleS5Press();         // bit4 = S5
   if (justPressed & 0x20) handleS6Press();         // bit5 = S6
   if (justPressed & 0x40) handleS7Press();         // bit6 = S7
