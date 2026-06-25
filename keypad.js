@@ -11,8 +11,8 @@
  * previously tested as hardware-faulty (see README's sudoers setup step for
  * why this needs a NOPASSWD rule) — wired anyway in case that's since
  * changed, since a faulty switch just means the handler never fires.
- * Pressing S2 or S8 invokes a caller-supplied handler (see onS2Press/onS8Press)
- * — used by server.js to show the LAN IP or a random string on the MAX7219.
+ * Pressing S2 invokes a caller-supplied handler (see onS2Press)
+ * — used by server.js to show the LAN IP on the MAX7219.
  * Each LED (1-8) mirrors its corresponding button's held state, lighting up
  * while Si is pressed and turning off on release.
  */
@@ -157,10 +157,9 @@ function handleS7Press() {
   });
 }
 
-// ── S2/S8 press → caller-supplied handlers ──────────────────────────────────
+// ── S2 press → caller-supplied handler ───────────────────────────────────────
 
 let s2Handler = null;
-let s8Handler = null;
 
 /**
  * Register a handler to invoke once per physical S2 press (rising edge).
@@ -169,15 +168,6 @@ let s8Handler = null;
  */
 function onS2Press(handler) {
   s2Handler = handler;
-}
-
-/**
- * Register a handler to invoke once per physical S8 press (rising edge).
- * @param {() => void} handler
- * @returns {void}
- */
-function onS8Press(handler) {
-  s8Handler = handler;
 }
 
 // ── Button polling with edge detection (fires once per physical press) ────
@@ -221,7 +211,6 @@ function poll() {
   if (justPressed & 0x10) handleS5Press();         // bit4 = S5
   if (justPressed & 0x20) handleS6Press();         // bit5 = S6
   if (justPressed & 0x40) handleS7Press();         // bit6 = S7
-  if (justPressed & 0x80) s8Handler && s8Handler(); // bit7 = S8
 
   lastButtons = buttons;
 }
@@ -247,4 +236,4 @@ function stop() {
 
 start();
 
-module.exports = { available, stop, onS2Press, onS8Press };
+module.exports = { available, stop, onS2Press };

@@ -6,8 +6,7 @@ Local Node.js web dashboard for Raspberry Pi with:
 - **TM1638 LED&KEY module** — press S1 to show the TOTP code on the 7-segment
   digits, press S2 to scroll this machine's LAN IP and port on the MAX7219,
   press S4, S5, or S6 to play a random sound from `sounds/S4/`, `sounds/S5/`,
-  or `sounds/S6/` respectively, press S7 to restart the rpi-dashboard service, or press S8 to
-  scroll a random message from `.strings` on the MAX7219 (display/show
+  or `sounds/S6/` respectively, press S7 to restart the rpi-dashboard service (display/show
   durations are tunable in `config.js`)
 
 ---
@@ -76,7 +75,6 @@ npm install
 ### 5. Run
 
 ```bash
-cp .strings.example .strings   # gitignored — edit with your own messages
 mkdir -p sounds/S4 sounds/S5 sounds/S6   # gitignored — add your own .mp3 files to each
 cp /path/to/your/s4-sounds/*.mp3 sounds/S4/
 cp /path/to/your/s5-sounds/*.mp3 sounds/S5/
@@ -108,7 +106,7 @@ PipeWire/PulseAudio so it reaches whatever output is set as your default sink
 systemd service needs access to your user's PipeWire/Pulse session — see the
 `XDG_RUNTIME_DIR` note in "Auto-start with systemd" below, or sound will play
 correctly when you test `mpg123` by hand over SSH but stay silent when
-triggered by the service. `sounds/` is gitignored like `.strings` (see step 5
+triggered by the service. `sounds/` is gitignored (see step 5
 above), so each machine keeps its own files — add them on your dev machine
 and push with `npm run deploy` (it's not in `deploy.js`'s exclude list
 either), or copy them directly onto the Pi.
@@ -118,15 +116,6 @@ Press **S7** — restarts the `rpi-dashboard` systemd service via
 with no interactive stdin. This requires a NOPASSWD sudoers rule (see
 "Auto-start with systemd" below) — without it, the restart silently fails and
 an error is logged. S7's switch is flaky — try a different press angle.
-
-Press **S8** — a random line from `.strings` scrolls on the MAX7219
-(using whatever speed/brightness/rotate/direction is currently set in the web
-UI) for `config.js`'s `OVERLAY_DURATION_MS`, then the previous display state
-(or nothing, if it was stopped) resumes. `.strings` is gitignored (see step 5
-above), so each machine keeps its own copy — edit it on your dev machine and push it
-with `npm run deploy` (it's not in `deploy.js`'s exclude list), or edit it
-directly on the Pi. One message per line; blank lines and lines starting
-with `#` are ignored.
 
 ---
 
@@ -227,9 +216,8 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
 | `drivers/audio.js` | `mpg123`-based random sound playback for the S4/S5/S6 buttons |
-| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S4/S5/S6 buttons → random sound; S7 button → service restart; S8 button → random-string overlay (S2/S8 overlays handled in `server.js`) |
+| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S4/S5/S6 buttons → random sound; S7 button → service restart (S2 overlay handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
-| `.strings.example` | Template for `.strings` (the gitignored, real one) — copy it per step 5 above |
 | `sounds/` | Gitignored folder with `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 buttons — create per step 5 above |
 
 ---

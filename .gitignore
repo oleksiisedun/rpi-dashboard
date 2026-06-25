@@ -1,6 +1,5 @@
 node_modules/
 .env
-.strings
 .display-state.json
 sounds/
 npm-debug.log*

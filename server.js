@@ -10,7 +10,6 @@ const PORT = config.server.PORT;
 // ─── Configuration ────────────────────────────────────────────────────────────
 
 const TOTP_SECRET = config.server.TOTP_SECRET;
-const RANDOM_STRINGS_PATH = path.join(__dirname, ".strings");
 const OVERLAY_DURATION_MS = config.display.OVERLAY_DURATION_MS;
 const DISPLAY_STATE_PATH = path.join(__dirname, ".display-state.json");
 
@@ -40,24 +39,6 @@ function loadDisplayState() {
   }
 }
 
-/**
- * Reads .strings and returns the non-empty, non-comment lines.
- * @returns {string[]}
- */
-function loadRandomStrings() {
-  let raw;
-  try {
-    raw = fs.readFileSync(RANDOM_STRINGS_PATH, "utf8");
-  } catch (e) {
-    console.warn(`[Display] Could not read ${RANDOM_STRINGS_PATH}: ${e.message}`);
-    return [];
-  }
-  return raw
-    .split("\n")
-    .map(line => line.trim())
-    .filter(line => line && !line.startsWith("#"));
-}
-
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
 app.use(express.json());
@@ -79,7 +60,7 @@ let displayState = {
 };
 
 // Matrix settings from the last web UI submission — kept around (even after
-// stop/overlay) so the S2/S8 overlay features can reuse them.
+// stop/overlay) so the S2 overlay feature can reuse it.
 let displaySettings = {
   speed: config.display.DEFAULT_SPEED_MS,
   brightness: config.display.DEFAULT_BRIGHTNESS,
@@ -200,7 +181,7 @@ app.get("/api/custom-symbols", (req, res) => {
   res.json({ symbols: Object.keys(CUSTOM) });
 });
 
-// ─── S2/S8 buttons → temporary matrix overlays ─────────────────────────────────
+// ─── S2 button → temporary matrix overlay ──────────────────────────────────────
 
 let overlayRevertTimer = null;
 let preOverlayState = null; // { active, text } captured just before the current overlay started
@@ -220,8 +201,7 @@ function cancelOverlayRevert() {
 /**
  * Show text on the MAX7219 for OVERLAY_DURATION_MS, using the current web UI
  * matrix settings, then restore whatever was showing before (or stop if
- * nothing was active). Shared by the S2 (LAN IP) and S8 (random string)
- * overlays.
+ * nothing was active). Used by the S2 (LAN IP) overlay.
  * @param {string} text
  * @returns {void}
  */
@@ -275,24 +255,7 @@ function handleS2Press() {
   showOverlay(text);
 }
 
-/**
- * Show a random line from .strings on the MAX7219 for OVERLAY_DURATION_MS.
- * @returns {void}
- */
-function handleS8Press() {
-  const strings = loadRandomStrings();
-  if (strings.length === 0) {
-    console.warn(`[Display] S8 pressed but ${RANDOM_STRINGS_PATH} has no strings`);
-    return;
-  }
-
-  const text = strings[Math.floor(Math.random() * strings.length)];
-  console.log(`[Display] S8 pressed — showing random string for ${OVERLAY_DURATION_MS / 1000}s: "${text}"`);
-  showOverlay(text);
-}
-
 keypad.onS2Press(handleS2Press);
-keypad.onS8Press(handleS8Press);
 
 // ─── Restore display state from before the last restart ───────────────────────
 

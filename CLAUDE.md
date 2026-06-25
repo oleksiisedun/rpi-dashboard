@@ -5,9 +5,8 @@ subsystems: TOTP 2FA code generation (via `oathtool`), a MAX7219 LED matrix scro
 display (SPI), and a TM1638 LED&KEY keypad (bit-banged GPIO) whose S1 button shows the TOTP
 code on the 7-segment digits, whose S2 button shows the Pi's LAN IP and port on the MAX7219,
 whose S4, S5, and S6 buttons each play a random sound from their own
-folder (`sounds/S4/`, `sounds/S5/`, and `sounds/S6/`, via `mpg123`), whose S7 button restarts the
-`rpi-dashboard` systemd service, and whose S8 button shows a random string
-from `.strings` on the MAX7219 (all show/display durations are tunable in `config.js`). Every subsystem is designed to run identically whether or not the
+folder (`sounds/S4/`, `sounds/S5/`, and `sounds/S6/`, via `mpg123`), and whose S7 button restarts
+the `rpi-dashboard` systemd service (all show/display durations are tunable in `config.js`). Every subsystem is designed to run identically whether or not the
 physical hardware is attached — see "Hardware-detection pattern" below. Hardware wiring and Pi
 setup steps live in `README.md`; this file is about the code.
 
@@ -16,15 +15,14 @@ setup steps live in `README.md`; this file is about the code.
 | File | Responsibility |
 |---|---|
 | `config.js` | Single place for tunable values (durations, intervals, default display settings, GPIO pins, ports, secret defaults, deploy path/exclusions) used by `server.js`/`display.js`/`keypad.js`/`deploy.js`. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
-| `server.js` | Express app, all HTTP routes, in-memory `displayState`/`displaySettings` (persisted to `.display-state.json` and restored on boot), S8 random-string overlay handler, SIGINT/SIGTERM cleanup |
+| `server.js` | Express app, all HTTP routes, in-memory `displayState`/`displaySettings` (persisted to `.display-state.json` and restored on boot), SIGINT/SIGTERM cleanup |
 | `drivers/display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop |
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js`; its `CUSTOM` export is also read directly by `server.js` for the `/api/custom-symbols` route |
 | `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
 | `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3` |
-| `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows TOTP on digits on S1 for `TOTP_SHOW_DURATION_MS`, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S8 (`onS8Press`) |
+| `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows TOTP on digits on S1 for `TOTP_SHOW_DURATION_MS`, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callback on S2 (`onS2Press`) |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
-| `.strings` | One message per line (blank/`#` lines ignored) — source for the S8 random-string overlay. Gitignored (per-machine content, like `.env`); `.strings.example` is the committed template |
-| `sounds/` | `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 random-sound buttons. Gitignored (per-machine content, like `.strings`) but not excluded from `deploy.js`, so it deploys normally |
+| `sounds/` | `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 random-sound buttons. Gitignored (per-machine content, like `.env`) but not excluded from `deploy.js`, so it deploys normally |
 | `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` (per-machine runtime state, like `.env` — pushing the dev machine's copy would clobber the Pi's actual state) |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
 | `deploy.js` | Deployment script — pushes local code to the Pi over SSH and restarts the systemd service |
@@ -88,8 +86,6 @@ Runs on `:3000`. No test suite or linter is configured in this project.
 - `drivers/` holds hardware-facing modules required by `server.js`/`keypad.js` at runtime, so
   unlike `glyph-editor/` it is **not** in `deploy.js`'s exclude list.
 - `deploy.js` excludes the whole `glyph-editor/` directory — it's dev-only and must never reach the Pi.
-- `.strings` is gitignored but **not** in `deploy.js`'s exclude list, so it deploys
-  normally — unlike `.env`, it's meant to reach the Pi, just not git.
 - `drivers/audio.js` requires the `mpg123` system binary on the Pi (`sudo apt install
   mpg123`); if missing, S4/S5/S6 just log a stub line instead of playing anything.
 - S7's switch is flaky (previously tested as hardware-faulty, which is why its sound-button role

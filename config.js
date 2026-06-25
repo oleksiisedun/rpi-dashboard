@@ -19,7 +19,7 @@ module.exports = {
     DEFAULT_BRIGHTNESS: 5,       // 0-15
     DEFAULT_ROTATE: false,
     DEFAULT_DIRECTION: "rtl",
-    OVERLAY_DURATION_MS: 60000, // shared duration for the S2 (LAN IP) and S8 (random string) overlays
+    OVERLAY_DURATION_MS: 60000, // duration for the S2 (LAN IP) overlay
   },
 
   keypad: {
