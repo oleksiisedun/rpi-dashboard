@@ -2,7 +2,11 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
 const config = require("./config");
+
+const execFileAsync = promisify(execFile);
 
 const app = express();
 const PORT = config.server.PORT;
@@ -256,6 +260,42 @@ function handleS2Press() {
 }
 
 keypad.onS2Press(handleS2Press);
+
+/**
+ * Fetches the active Wi-Fi connection's SSID and password via `nmcli`. Needs `sudo` —
+ * NetworkManager only returns the secret to an authorized session, which the service
+ * (no interactive login) doesn't have; requires a NOPASSWD sudoers rule (see README).
+ * @returns {Promise<{ ssid: string, password: string }|null>} null if there's no active Wi-Fi connection
+ */
+async function getWifiCredentials() {
+  try {
+    const { stdout } = await execFileAsync("sudo", ["nmcli", "device", "wifi", "show-password"]);
+    const ssidMatch = stdout.match(/^SSID:\s*(.+)$/m);
+    if (!ssidMatch) return null;
+    const passwordMatch = stdout.match(/^Password:\s*(.+)$/m);
+    return { ssid: ssidMatch[1], password: passwordMatch ? passwordMatch[1] : "(open)" };
+  } catch (e) {
+    console.warn(`[Display] Could not read Wi-Fi credentials: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * Show the current Wi-Fi network's password on the MAX7219 for OVERLAY_DURATION_MS.
+ * @returns {Promise<void>}
+ */
+async function handleS3Press() {
+  const creds = await getWifiCredentials();
+  if (!creds) {
+    console.warn("[Display] S3 pressed but no active Wi-Fi connection was found");
+    return;
+  }
+
+  console.log(`[Display] S3 pressed — showing password for "${creds.ssid}" for ${OVERLAY_DURATION_MS / 1000}s: "${creds.password}"`);
+  showOverlay(creds.password);
+}
+
+keypad.onS3Press(handleS3Press);
 
 // ─── Restore display state from before the last restart ───────────────────────
 

@@ -5,6 +5,7 @@ Local Node.js web dashboard for Raspberry Pi with:
 - **MAX7219 4×8×8 LED matrix** — scrolling text in Latin + Ukrainian Cyrillic
 - **TM1638 LED&KEY module** — press S1 to show the TOTP code on the 7-segment
   digits, press S2 to scroll this machine's LAN IP and port on the MAX7219,
+  press S3 to scroll the current Wi-Fi network's password on the MAX7219,
   press S4, S5, or S6 to play a random sound from `sounds/S4/`, `sounds/S5/`,
   or `sounds/S6/` respectively, press S7 to restart the rpi-dashboard service (display/show
   durations are tunable in `config.js`)
@@ -99,6 +100,13 @@ currently set in the web UI) for `config.js`'s `OVERLAY_DURATION_MS`, then the
 previous display state (or nothing, if it was stopped) resumes. Useful since
 the Pi uses DHCP and its IP can change between boots.
 
+Press **S3** — the current Wi-Fi network's password scrolls on the MAX7219
+for `config.js`'s `OVERLAY_DURATION_MS`, then the previous display state
+resumes, same as S2. Reads the password via
+`sudo nmcli device wifi show-password`, which requires a NOPASSWD sudoers
+rule (see "Auto-start with systemd" below) — without it, the service can
+still read the SSID but gets an empty password.
+
 Press **S4**, **S5**, or **S6** — a random `.mp3` from `sounds/S4/`, `sounds/S5/`, or
 `sounds/S6/` (respectively) plays via `mpg123 -o pulse`, which routes through
 PipeWire/PulseAudio so it reaches whatever output is set as your default sink
@@ -176,6 +184,22 @@ pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart rpi-dashboard
 (replace `pi` with `whoami` if the service runs as a different user; confirm
 the `systemctl` path with `which systemctl` if it's not `/usr/bin/systemctl`).
 
+S3's Wi-Fi password lookup (`nmcli device wifi show-password`) needs the same
+treatment: NetworkManager only returns the secret to an authorized caller, and
+an interactive SSH session is authorized in a way the headless service isn't
+— so the service gets the SSID but an empty password unless run via `sudo`.
+Add a second NOPASSWD rule:
+
+```bash
+sudo visudo -f /etc/sudoers.d/rpi-dashboard-wifi-password
+```
+
+```
+pi ALL=(root) NOPASSWD: /usr/bin/nmcli device wifi show-password
+```
+
+(confirm the `nmcli` path with `which nmcli` if it's not `/usr/bin/nmcli`).
+
 ---
 
 ## Deploying updates
@@ -216,7 +240,7 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
 | `drivers/audio.js` | `mpg123`-based random sound playback for the S4/S5/S6 buttons |
-| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S4/S5/S6 buttons → random sound; S7 button → service restart (S2 overlay handled in `server.js`) |
+| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S7 button → service restart (S2/S3 overlays handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
 | `sounds/` | Gitignored folder with `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 buttons — create per step 5 above |
 
