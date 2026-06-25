@@ -6,7 +6,8 @@ display (SPI), and a TM1638 LED&KEY keypad (bit-banged GPIO) whose S1 button sho
 code on the 7-segment digits, whose S2 button shows the Pi's LAN IP and port on the MAX7219,
 whose S3 button shows the current Wi-Fi network's password on the MAX7219,
 whose S4, S5, and S6 buttons each play a random sound from their own
-folder (`sounds/S4/`, `sounds/S5/`, and `sounds/S6/`, via `mpg123`), and whose S7 button restarts
+folder (`sounds/S4/`, `sounds/S5/`, and `sounds/S6/`, via `mpg123`), whose S8 button stops
+any sound currently playing, and whose S7 button restarts
 the `rpi-dashboard` systemd service (all show/display durations are tunable in `config.js`). Every subsystem is designed to run identically whether or not the
 physical hardware is attached — see "Hardware-detection pattern" below. Hardware wiring and Pi
 setup steps live in `README.md`; this file is about the code.
@@ -20,8 +21,8 @@ setup steps live in `README.md`; this file is about the code.
 | `drivers/display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop |
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js`; its `CUSTOM` export is also read directly by `server.js` for the `/api/custom-symbols` route |
 | `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
-| `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3` |
-| `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows TOTP on digits on S1 for `TOTP_SHOW_DURATION_MS`, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S3 (`onS3Press`) |
+| `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3`, `stop()` kills whatever is currently playing/queued |
+| `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows TOTP on digits on S1 for `TOTP_SHOW_DURATION_MS`, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, stops any playing sound on S8, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S3 (`onS3Press`) |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
 | `sounds/` | `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 random-sound buttons. Gitignored (per-machine content, like `.env`) but not excluded from `deploy.js`, so it deploys normally |
 | `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` (per-machine runtime state, like `.env` — pushing the dev machine's copy would clobber the Pi's actual state) |

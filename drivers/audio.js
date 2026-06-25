@@ -99,4 +99,16 @@ function playRandom(folder) {
   spawnPlayer(filePath, file);
 }
 
-module.exports = { available, playRandom };
+/**
+ * Stop any currently playing or queued sound.
+ * @returns {void}
+ */
+function stop() {
+  pending = null;
+  if (currentPlayer) {
+    currentPlayer.killedByUs = true;
+    currentPlayer.kill();
+  }
+}
+
+module.exports = { available, playRandom, stop };

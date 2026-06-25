@@ -7,7 +7,8 @@ Local Node.js web dashboard for Raspberry Pi with:
   digits, press S2 to scroll this machine's LAN IP and port on the MAX7219,
   press S3 to scroll the current Wi-Fi network's password on the MAX7219,
   press S4, S5, or S6 to play a random sound from `sounds/S4/`, `sounds/S5/`,
-  or `sounds/S6/` respectively, press S7 to restart the rpi-dashboard service (display/show
+  or `sounds/S6/` respectively, press S8 to stop any sound that's playing,
+  press S7 to restart the rpi-dashboard service (display/show
   durations are tunable in `config.js`)
 
 ---
@@ -125,6 +126,10 @@ with no interactive stdin. This requires a NOPASSWD sudoers rule (see
 "Auto-start with systemd" below) — without it, the restart silently fails and
 an error is logged. S7's switch is flaky — try a different press angle.
 
+Press **S8** — immediately stops whatever sound is currently playing (or
+queued) from an S4/S5/S6 press, by killing the `mpg123` process. Unlike S3/S7
+this is a plain in-process kill, so no sudoers rule is needed.
+
 ---
 
 ## Auto-start with systemd
@@ -239,8 +244,8 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 | `drivers/display.js` | MAX7219 driver (SPI, scrolling) |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
-| `drivers/audio.js` | `mpg123`-based random sound playback for the S4/S5/S6 buttons |
-| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S7 button → service restart (S2/S3 overlays handled in `server.js`) |
+| `drivers/audio.js` | `mpg123`-based random sound playback for the S4/S5/S6 buttons, plus `stop()` for the S8 button |
+| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S8 button → stop sound playback; S7 button → service restart (S2/S3 overlays handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
 | `sounds/` | Gitignored folder with `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 buttons — create per step 5 above |
 

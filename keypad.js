@@ -6,7 +6,8 @@
  * Behavior: pressing S1 generates a fresh TOTP code and shows it on the
  * 8 seven-segment digits for 15 seconds, then clears the display.
  * Pressing S4, S5, or S6 plays a random sound from its own folder
- * (sounds/S4/, sounds/S5/, sounds/S6/ respectively).
+ * (sounds/S4/, sounds/S5/, sounds/S6/ respectively). Pressing S8 stops
+ * any sound currently playing.
  * Pressing S7 restarts the rpi-dashboard systemd service. S7's switch
  * previously tested as hardware-faulty (see README's sudoers setup step for
  * why this needs a NOPASSWD rule) — wired anyway in case that's since
@@ -143,6 +144,17 @@ function handleS4Press() {
   audio.playRandom(SOUNDS_S4_DIR);
 }
 
+// ── S8 press → stop any playing sound ──────────────────────────────────────
+
+/**
+ * Stop any currently playing sound.
+ * @returns {void}
+ */
+function handleS8Press() {
+  console.log("[Keypad] S8 pressed — stopping sound");
+  audio.stop();
+}
+
 // ── S7 press → restart the rpi-dashboard service ───────────────────────────
 
 /**
@@ -226,6 +238,7 @@ function poll() {
   if (justPressed & 0x10) handleS5Press();         // bit4 = S5
   if (justPressed & 0x20) handleS6Press();         // bit5 = S6
   if (justPressed & 0x40) handleS7Press();         // bit6 = S7
+  if (justPressed & 0x80) handleS8Press();         // bit7 = S8
 
   lastButtons = buttons;
 }
