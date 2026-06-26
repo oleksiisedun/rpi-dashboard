@@ -28,9 +28,11 @@ const config = require("./config");
 const TOTP_SECRET = config.server.TOTP_SECRET;
 const SHOW_DURATION_MS = config.keypad.TOTP_SHOW_DURATION_MS;
 const POLL_INTERVAL_MS = config.keypad.POLL_INTERVAL_MS; // ~16 Hz — plenty fast for a human button press
-const SOUNDS_S6_DIR = path.join(__dirname, "sounds", "S6");
-const SOUNDS_S5_DIR = path.join(__dirname, "sounds", "S5");
-const SOUNDS_S4_DIR = path.join(__dirname, "sounds", "S4");
+const SOUND_DIRS = {
+  S4: path.join(__dirname, "sounds", "S4"),
+  S5: path.join(__dirname, "sounds", "S5"),
+  S6: path.join(__dirname, "sounds", "S6"),
+};
 
 let tm = null;
 let available = false;
@@ -92,6 +94,16 @@ function clearDigits() {
 let clearTimer = null;
 
 /**
+ * Cancel any pending digit auto-clear and schedule a new one after ms.
+ * @param {number} ms
+ * @returns {void}
+ */
+function scheduleDigitClear(ms) {
+  if (clearTimer) clearTimeout(clearTimer);
+  clearTimer = setTimeout(() => { clearDigits(); clearTimer = null; }, ms);
+}
+
+/**
  * Generate a fresh TOTP code and show it on the digits for SHOW_DURATION_MS,
  * then clear automatically.
  * @returns {Promise<void>}
@@ -101,47 +113,24 @@ async function handleS1Press() {
   try {
     const code = await generateTOTP(TOTP_SECRET);
     showOnDigits(code);
-
-    if (clearTimer) clearTimeout(clearTimer);
-    clearTimer = setTimeout(() => {
-      clearDigits();
-      clearTimer = null;
-    }, SHOW_DURATION_MS);
+    scheduleDigitClear(SHOW_DURATION_MS);
   } catch (e) {
     console.error("[Keypad] TOTP error:", e.message);
     showOnDigits("Err");
-    if (clearTimer) clearTimeout(clearTimer);
-    clearTimer = setTimeout(() => { clearDigits(); clearTimer = null; }, config.keypad.ERROR_SHOW_DURATION_MS);
+    scheduleDigitClear(config.keypad.ERROR_SHOW_DURATION_MS);
   }
 }
 
-// ── S6/S5/S4 press → play random sound ──────────────────────────────────────
+// ── S4/S5/S6 press → play random sound ──────────────────────────────────────
 
 /**
- * Play a random sound from SOUNDS_S6_DIR.
+ * Play a random sound from the folder mapped to the given button.
+ * @param {'S4'|'S5'|'S6'} button
  * @returns {void}
  */
-function handleS6Press() {
-  console.log("[Keypad] S6 pressed — playing random sound");
-  audio.playRandom(SOUNDS_S6_DIR);
-}
-
-/**
- * Play a random sound from SOUNDS_S5_DIR.
- * @returns {void}
- */
-function handleS5Press() {
-  console.log("[Keypad] S5 pressed — playing random sound");
-  audio.playRandom(SOUNDS_S5_DIR);
-}
-
-/**
- * Play a random sound from SOUNDS_S4_DIR.
- * @returns {void}
- */
-function handleS4Press() {
-  console.log("[Keypad] S4 pressed — playing random sound");
-  audio.playRandom(SOUNDS_S4_DIR);
+function handleSoundPress(button) {
+  console.log(`[Keypad] ${button} pressed — playing random sound`);
+  audio.playRandom(SOUND_DIRS[button]);
 }
 
 // ── S8 press → stop any playing sound ──────────────────────────────────────
@@ -234,9 +223,9 @@ function poll() {
   if (justPressed & 0x01) handleS1Press();         // bit0 = S1
   if (justPressed & 0x02) s2Handler && s2Handler(); // bit1 = S2
   if (justPressed & 0x04) s3Handler && s3Handler(); // bit2 = S3
-  if (justPressed & 0x08) handleS4Press();         // bit3 = S4
-  if (justPressed & 0x10) handleS5Press();         // bit4 = S5
-  if (justPressed & 0x20) handleS6Press();         // bit5 = S6
+  if (justPressed & 0x08) handleSoundPress('S4'); // bit3 = S4
+  if (justPressed & 0x10) handleSoundPress('S5'); // bit4 = S5
+  if (justPressed & 0x20) handleSoundPress('S6'); // bit5 = S6
   if (justPressed & 0x40) handleS7Press();         // bit6 = S7
   if (justPressed & 0x80) handleS8Press();         // bit7 = S8
 

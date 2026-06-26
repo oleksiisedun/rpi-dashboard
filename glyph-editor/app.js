@@ -126,12 +126,20 @@ function renderCharList() {
 }
 
 /**
+ * Remove the 'active' class from every sidebar tab button.
+ * @returns {void}
+ */
+function clearActiveTabs() {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+}
+
+/**
  * Wires each sidebar tab button to switch the active tab and re-render the char list.
  * @returns {void}
  */
 document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    clearActiveTabs();
     tab.classList.add('active');
     currentTab = tab.dataset.tab;
     renderCharList();
@@ -215,8 +223,7 @@ function renderSingleOutput() {
   const bytes = bitsToBytes();
   font[currentChar] = bytes;
   const label = currentChar === ' ' ? 'SP' : currentChar;
-  document.getElementById('singleOutput').textContent =
-    `[${bytes.map(v=>'0x'+v.toString(16).toUpperCase().padStart(2,'0')).join(',')}], // ${label}`;
+  document.getElementById('singleOutput').textContent = `[${byteList(bytes)}], // ${label}`;
 }
 
 /**
@@ -319,16 +326,13 @@ document.getElementById('addCharBtn').onclick = () => {
   const input = document.getElementById('newCharInput');
   const ch = input.value;
   if (!ch) return;
-  if (!font[ch]) {
-    font[ch] = [0,0,0,0,0];
-    if (!LATIN_CHARS.includes(ch) && !CYRILLIC_CHARS.includes(ch) && !customChars.includes(ch)) {
-      customChars.push(ch);
-    }
+  if (!font[ch]) font[ch] = [0, 0, 0, 0, 0];
+  if (!LATIN_CHARS.includes(ch) && !CYRILLIC_CHARS.includes(ch) && !customChars.includes(ch)) {
+    customChars.push(ch);
   }
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  clearActiveTabs();
   document.querySelector('.tab[data-tab="custom"]').classList.add('active');
   currentTab = 'custom';
-  if (!customChars.includes(ch)) customChars.push(ch);
   input.value = '';
   loadChar(ch);
 };
