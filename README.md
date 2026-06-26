@@ -236,6 +236,34 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 
 ---
 
+## Architecture
+
+`server.js` is the central hub: it exposes the HTTP API consumed by the browser frontend and registers S2/S3 overlay callbacks on `keypad.js`. `keypad.js` runs its own polling loop against `drivers/tm1638.js` and dispatches button presses to `totp.js`, `drivers/audio.js`, or back to `server.js` via those callbacks. Both `server.js` and `keypad.js` share the `totp.js` `oathtool` wrapper; `server.js` drives `drivers/display.js`, which reads glyph bitmaps from `drivers/font.js` before writing scroll frames over SPI. All tunable values flow in from `config.js`.
+
+```mermaid
+graph TD
+  Browser["Browser\n(index.html)"] -->|HTTP REST| Server["server.js\nExpress app"]
+
+  Server --> Display["drivers/display.js\nMAX7219 SPI scroll"]
+  Server --> TOTP["totp.js\noathtool wrapper"]
+
+  Keypad["keypad.js\nbutton polling"] --> TM["drivers/tm1638.js\nbit-banged GPIO"]
+  Keypad --> TOTP
+  Keypad -->|S2 / S3 callbacks| Server
+  Keypad --> Audio["drivers/audio.js\nmpg123 wrapper"]
+
+  Display --> Font["drivers/font.js\nbitmap glyphs"]
+  Display --> HW1[("MAX7219\nLED matrix")]
+  TM --> HW2[("TM1638\nLED & KEY")]
+  Audio --> HW3[("Speaker\n/ Bluetooth")]
+
+  Config["config.js\ntunable values"] -.-> Server
+  Config -.-> Keypad
+  Config -.-> Display
+```
+
+---
+
 ## Files
 
 | File | Purpose |
