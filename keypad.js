@@ -3,8 +3,9 @@
 /**
  * keypad.js — TM1638 LED&KEY integration.
  *
- * Behavior: pressing S1 generates a fresh TOTP code and shows it on the
- * 8 seven-segment digits for 15 seconds, then clears the display.
+ * Behavior: the 8 seven-segment digits show the current time and date
+ * (HH.MM DD.MM) by default, updating every second. Pressing S1 generates a
+ * fresh TOTP code and shows it for 15 seconds, then the clock resumes.
  * Pressing S4, S5, or S6 plays a random sound from its own folder
  * (sounds/S4/, sounds/S5/, sounds/S6/ respectively). Pressing S8 stops
  * any sound currently playing.
@@ -89,35 +90,78 @@ function clearDigits() {
   tm.clear();
 }
 
-// ── S1 press → show TOTP for 10s ───────────────────────────────────────────
+// ── Default clock display ────────────────────────────────────────────────────
+
+let clockPaused = false;  // true while TOTP / error is occupying the digits
+let clockInterval = null;
+
+/**
+ * Render the current time and date on all 8 digits as HH.MMDD.MM,
+ * where the decimal points on positions 1 and 5 act as separators.
+ * @returns {void}
+ */
+function showClock() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const hh = pad(now.getHours()),  mm = pad(now.getMinutes());
+  const dd = pad(now.getDate()),   mo = pad(now.getMonth() + 1);
+  const segs = [
+    DIGIT_FONT[hh[0]],
+    DIGIT_FONT[hh[1]] | 0x80,  // decimal point as time separator
+    DIGIT_FONT[mm[0]],
+    DIGIT_FONT[mm[1]],
+    DIGIT_FONT[dd[0]],
+    DIGIT_FONT[dd[1]] | 0x80,  // decimal point as date separator
+    DIGIT_FONT[mo[0]],
+    DIGIT_FONT[mo[1]],
+  ];
+  if (!tm) { console.log(`[Keypad stub] clock: ${hh}.${mm} ${dd}.${mo}`); return; }
+  tm.setSegments(segs);
+}
+
+/**
+ * Show the clock immediately and start a 1-second interval that keeps it updated.
+ * @returns {void}
+ */
+function startClock() {
+  showClock();
+  clockInterval = setInterval(() => { if (!clockPaused) showClock(); }, 1000);
+}
+
+// ── S1 press → show TOTP, then resume clock ─────────────────────────────────
 
 let clearTimer = null;
 
 /**
- * Cancel any pending digit auto-clear and schedule a new one after ms.
+ * Cancel any pending resume timer and schedule a new one that restores the clock after ms.
  * @param {number} ms
  * @returns {void}
  */
-function scheduleDigitClear(ms) {
+function scheduleClockResume(ms) {
   if (clearTimer) clearTimeout(clearTimer);
-  clearTimer = setTimeout(() => { clearDigits(); clearTimer = null; }, ms);
+  clearTimer = setTimeout(() => {
+    clockPaused = false;
+    showClock();
+    clearTimer = null;
+  }, ms);
 }
 
 /**
  * Generate a fresh TOTP code and show it on the digits for SHOW_DURATION_MS,
- * then clear automatically.
+ * then resume the clock automatically.
  * @returns {Promise<void>}
  */
 async function handleS1Press() {
   console.log("[Keypad] S1 pressed — generating TOTP code");
+  clockPaused = true;
   try {
     const code = await generateTOTP(TOTP_SECRET);
     showOnDigits(code);
-    scheduleDigitClear(SHOW_DURATION_MS);
+    scheduleClockResume(SHOW_DURATION_MS);
   } catch (e) {
     console.error("[Keypad] TOTP error:", e.message);
     showOnDigits("Err");
-    scheduleDigitClear(config.keypad.ERROR_SHOW_DURATION_MS);
+    scheduleClockResume(config.keypad.ERROR_SHOW_DURATION_MS);
   }
 }
 
@@ -242,15 +286,17 @@ function start() {
 }
 
 /**
- * Stop polling, cancel any pending auto-clear, and blank the digits.
+ * Stop polling, cancel any pending timers, and blank the digits.
  * @returns {void}
  */
 function stop() {
-  if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
-  if (clearTimer)  { clearTimeout(clearTimer);  clearTimer  = null; }
+  if (pollHandle)    { clearInterval(pollHandle);    pollHandle    = null; }
+  if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+  if (clearTimer)    { clearTimeout(clearTimer);     clearTimer    = null; }
   clearDigits();
 }
 
 start();
+if (available) startClock();
 
 module.exports = { available, stop, onS2Press, onS3Press };
