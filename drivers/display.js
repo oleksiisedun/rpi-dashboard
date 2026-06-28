@@ -17,8 +17,10 @@ const config = require("../config");
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const NUM_MODULES = config.display.NUM_MODULES;
-const SPI_SPEED   = config.display.SPI_SPEED_HZ;
+const NUM_MODULES  = config.display.NUM_MODULES;
+const SPI_SPEED    = config.display.SPI_SPEED_HZ;
+const SPI_BUS      = config.display.SPI_BUS;
+const SPI_DEVICE   = config.display.SPI_DEVICE;
 
 const REG = {
   NOOP        : 0x00,
@@ -37,7 +39,7 @@ let available = false;
 
 try {
   const SpiDev = require("spi-device");
-  spi = SpiDev.openSync(0, 0);
+  spi = SpiDev.openSync(SPI_BUS, SPI_DEVICE);
   available = true;
   _initMaximChips();
   console.log("[Display] MAX7219 SPI opened OK");
