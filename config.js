@@ -26,7 +26,7 @@ module.exports = {
     TM1638_STB_PIN: 29,
     TM1638_CLK_PIN: 31,
     TM1638_DIO_PIN: 33,
-    TM1638_BRIGHTNESS: 4,        // 0-7
+    TM1638_BRIGHTNESS: 3,        // 0-7
     TOTP_SHOW_DURATION_MS: 15000,
     ERROR_SHOW_DURATION_MS: 3000,
     POLL_INTERVAL_MS: 60,        // ~16 Hz
