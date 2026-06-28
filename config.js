@@ -28,8 +28,8 @@ module.exports = {
   },
 
   display: {
-    SPI_BUS: requirePin("DISPLAY_SPI_BUS"),
-    SPI_DEVICE: requirePin("DISPLAY_SPI_DEVICE"),
+    SPI_BUS: Number(process.env.DISPLAY_SPI_BUS) || 0,
+    SPI_DEVICE: Number(process.env.DISPLAY_SPI_DEVICE) || 0,
     NUM_MODULES: 4,
     SPI_SPEED_HZ: 10000000,
     DEFAULT_SPEED_MS: Number(process.env.DISPLAY_DEFAULT_SPEED_MS) || 40,
