@@ -8,7 +8,7 @@ whose S3 button shows the current Wi-Fi network's password on the MAX7219,
 whose S4, S5, and S6 buttons each play a random sound from their own
 folder (`sounds/S4/`, `sounds/S5/`, and `sounds/S6/`, via `mpg123`), whose S8 button stops
 any sound currently playing, and whose S7 button restarts
-the `rpi-dashboard` systemd service (all show/display durations are tunable in `config.js`). Every subsystem is designed to run identically whether or not the
+the `rpi-dashboard` systemd service (all show/display durations are tunable via `.env`). Every subsystem is designed to run identically whether or not the
 physical hardware is attached — see "Hardware-detection pattern" below. Hardware wiring and Pi
 setup steps live in `README.md`; this file is about the code.
 
@@ -16,7 +16,9 @@ setup steps live in `README.md`; this file is about the code.
 
 | File | Responsibility |
 |---|---|
-| `config.js` | Single place for tunable values (durations, intervals, default display settings, GPIO pins, ports, secret defaults, deploy path/exclusions) used by `server.js`/`display.js`/`keypad.js`/`deploy.js`. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
+| `config.js` | Single place for tunable values (durations, intervals, default display settings, GPIO pins, ports, secret defaults, deploy path/exclusions) used by `server.js`/`display.js`/`keypad.js`/`deploy.js`. All tunable values read from `.env` via `process.env` with sensible defaults; pin values use `requirePin()` which logs an error (rather than silently using a wrong default) if the env var is missing. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
+| `.env` | App config — display settings, GPIO pins, timing durations, `TOTP_SECRET`. Gitignored (per-machine values) but **deployed** to the Pi by `deploy.js` so both machines have their own copy. Copy from `.env.example` to get started |
+| `.env.deploy` | Deploy credentials — `PI_HOST`, `PI_USER`, `PI_PASSWORD`, `PI_PATH`. Dev-only; gitignored and excluded from `deploy.js` so it never reaches the Pi. Copy from `.env.deploy.example` |
 | `server.js` | Express app, all HTTP routes, in-memory `displayState`/`displaySettings` (persisted to `.display-state.json` and restored on boot), SIGINT/SIGTERM cleanup |
 | `drivers/display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop |
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js`; its `CUSTOM` export is also read directly by `server.js` for the `/api/custom-symbols` route |
@@ -24,10 +26,10 @@ setup steps live in `README.md`; this file is about the code.
 | `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3`, `stop()` kills whatever is currently playing/queued |
 | `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows current time/date (`HH.MMDD.MM`) on the 7-segment digits by default (1 s update interval), shows TOTP on digits on S1 for `TOTP_SHOW_DURATION_MS` then resumes the clock, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, stops any playing sound on S8, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S3 (`onS3Press`) |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
-| `sounds/` | `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 random-sound buttons. Gitignored (per-machine content, like `.env`) but not excluded from `deploy.js`, so it deploys normally |
-| `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` (per-machine runtime state, like `.env` — pushing the dev machine's copy would clobber the Pi's actual state) |
+| `sounds/` | `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 random-sound buttons. Gitignored (per-machine content) but not excluded from `deploy.js`, so it deploys normally |
+| `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` — pushing the dev machine's copy would clobber the Pi's actual state |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
-| `deploy.js` | Deployment script — pushes local code to the Pi over SSH and restarts the systemd service |
+| `deploy.js` | Deployment script — reads Pi credentials from `.env.deploy`, pushes local code (including `.env`) to the Pi over SSH, and restarts the systemd service |
 | `glyph-editor/` | Dev-only glyph design tool for `drivers/font.js`, run via `npm run glyph-editor` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `drivers/font.js` live and serves it over `/api/font`) — not part of the deployed app |
 
 ## Hardware-detection pattern
@@ -38,7 +40,7 @@ Every driver module opens its hardware inside a `try`/`catch` at module load, ex
 ```js
 let spi = null, available = false;
 try {
-  spi = require("spi-device").openSync(0, 0);
+  spi = require("spi-device").openSync(config.display.SPI_BUS, config.display.SPI_DEVICE);
   available = true;
 } catch (e) {
   console.warn(`not available (${e.message}) — running in stub/log mode`);
@@ -56,7 +58,9 @@ mode) on a non-Pi dev machine.
 
 ```bash
 npm install        # compiles spi-device/rpio native addons; needs build-essential on the Pi
-TOTP_SECRET=... node server.js
+cp .env.example .env          # then add TOTP_SECRET=... to .env
+cp .env.deploy.example .env.deploy  # then fill in PI_HOST / PI_USER / PI_PASSWORD
+TOTP_SECRET=... node server.js      # or just node server.js if TOTP_SECRET is in .env
 ```
 
 Runs on `:3000`. No test suite or linter is configured in this project.

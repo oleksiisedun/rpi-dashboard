@@ -9,7 +9,7 @@ Local Node.js web dashboard for Raspberry Pi with:
   press S4, S5, or S6 to play a random sound from `sounds/S4/`, `sounds/S5/`,
   or `sounds/S6/` respectively, press S8 to stop any sound that's playing,
   press S7 to restart the rpi-dashboard service (display/show
-  durations are tunable in `config.js`)
+  durations are tunable via `.env`)
 
 ---
 
@@ -81,7 +81,8 @@ mkdir -p sounds/S4 sounds/S5 sounds/S6   # gitignored — add your own .mp3 file
 cp /path/to/your/s4-sounds/*.mp3 sounds/S4/
 cp /path/to/your/s5-sounds/*.mp3 sounds/S5/
 cp /path/to/your/s6-sounds/*.mp3 sounds/S6/
-TOTP_SECRET=YOUR_ACTUAL_SECRET node server.js
+cp .env.example .env   # add TOTP_SECRET=YOUR_ACTUAL_SECRET to .env
+node server.js
 ```
 
 Open `http://<RPI_IP>:3000` from any device on your network.
@@ -93,16 +94,16 @@ Keypad:  ✅ TM1638 ready — press S1 to show TOTP
 ```
 
 Press **S1** on the TM1638 board — the TOTP code appears on the 7-segment
-digits, then clears automatically after `config.js`'s `TOTP_SHOW_DURATION_MS`.
+digits, then clears automatically after `.env`'s `TOTP_SHOW_DURATION_MS`.
 
 Press **S2** — this machine's LAN IP and port (e.g. `192.168.0.141:3000`)
 scrolls on the MAX7219 (using whatever speed/brightness/rotate/direction is
-currently set in the web UI) for `config.js`'s `OVERLAY_DURATION_MS`, then the
+currently set in the web UI) for `.env`'s `OVERLAY_DURATION_MS`, then the
 previous display state (or nothing, if it was stopped) resumes. Useful since
 the Pi uses DHCP and its IP can change between boots.
 
 Press **S3** — the current Wi-Fi network's password scrolls on the MAX7219
-for `config.js`'s `OVERLAY_DURATION_MS`, then the previous display state
+for `.env`'s `OVERLAY_DURATION_MS`, then the previous display state
 resumes, same as S2. Reads the password via
 `sudo nmcli device wifi show-password`, which requires a NOPASSWD sudoers
 rule (see "Auto-start with systemd" below) — without it, the service can
@@ -212,13 +213,17 @@ pi ALL=(root) NOPASSWD: /usr/bin/nmcli device wifi show-password
 From your dev machine:
 
 ```bash
-cp .env.example .env   # fill in PI_HOST / PI_USER / PI_PASSWORD / PI_PATH
+cp .env.example .env               # add TOTP_SECRET=YOUR_ACTUAL_SECRET; other settings have sensible defaults
+cp .env.deploy.example .env.deploy # fill in PI_HOST / PI_USER / PI_PASSWORD / PI_PATH
 npm install
 npm run deploy
 ```
 
-This copies the project to the Pi over SSH, runs `npm install --production` there, and restarts
-the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in from `.env`).
+This copies the project to the Pi over SSH (including `.env` so the Pi gets all app config),
+runs `npm install --production` there, and restarts the `rpi-dashboard` systemd service
+(using `sudo -S`, with the password piped in from `.env.deploy`).
+
+`.env.deploy` holds only deploy credentials and never reaches the Pi.
 
 ---
 
@@ -238,7 +243,7 @@ the `rpi-dashboard` systemd service (using `sudo -S`, with the password piped in
 
 ## Architecture
 
-`server.js` is the central hub: it exposes the HTTP API consumed by the browser frontend and registers S2/S3 overlay callbacks on `keypad.js`. `keypad.js` runs its own polling loop against `drivers/tm1638.js` and dispatches button presses to `totp.js`, `drivers/audio.js`, or back to `server.js` via those callbacks. Both `server.js` and `keypad.js` share the `totp.js` `oathtool` wrapper; `server.js` drives `drivers/display.js`, which reads glyph bitmaps from `drivers/font.js` before writing scroll frames over SPI. All tunable values flow in from `config.js`.
+`server.js` is the central hub: it exposes the HTTP API consumed by the browser frontend and registers S2/S3 overlay callbacks on `keypad.js`. `keypad.js` runs its own polling loop against `drivers/tm1638.js` and dispatches button presses to `totp.js`, `drivers/audio.js`, or back to `server.js` via those callbacks. Both `server.js` and `keypad.js` share the `totp.js` `oathtool` wrapper; `server.js` drives `drivers/display.js`, which reads glyph bitmaps from `drivers/font.js` before writing scroll frames over SPI. All tunable values are read from `.env` via `config.js`.
 
 ```mermaid
 graph TD
@@ -257,7 +262,7 @@ graph TD
   TM --> HW2[("TM1638\nLED & KEY")]
   Audio --> HW3[("Speaker\n/ Bluetooth")]
 
-  Config["config.js\ntunable values"] -.-> Server
+  Config[".env / config.js\ntunable values"] -.-> Server
   Config -.-> Keypad
   Config -.-> Display
 ```
