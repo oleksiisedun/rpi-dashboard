@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ path: ".env.deploy" });
 const path = require("path");
 const { NodeSSH } = require("node-ssh");
 const config = require("./config");
@@ -13,7 +13,7 @@ function loadConfig() {
   const { PI_HOST, PI_USER, PI_PASSWORD, PI_PATH } = process.env;
   if (!PI_HOST || !PI_USER || !PI_PASSWORD) {
     throw new Error(
-      "PI_HOST, PI_USER and PI_PASSWORD must be set in .env (see .env.example)"
+      "PI_HOST, PI_USER and PI_PASSWORD must be set in .env.deploy (see .env.deploy.example)"
     );
   }
   return {
