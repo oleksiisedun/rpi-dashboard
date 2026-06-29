@@ -51,6 +51,6 @@ module.exports = {
 
   deploy: {
     DEFAULT_REMOTE_PATH: process.env.PI_PATH || "/home/pi/rpi-dashboard",
-    EXCLUDED: ["node_modules", ".git", ".env.deploy", "glyph-editor", ".display-state.json"],
+    EXCLUDED: ["node_modules", ".git", ".env.deploy", "glyph-editor", ".display-state.json", "Archive"],
   },
 };
