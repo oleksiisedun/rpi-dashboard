@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "deploy": "node deploy.js",
-    "glyph-editor": "node glyph-editor/serve.js"
+    "glyph-editor": "node tools/glyph-editor/serve.js",
+    "pinmap": "node tools/pinmap/pinmap.js"
   },
   "dependencies": {
     "express": "^4.18.2",

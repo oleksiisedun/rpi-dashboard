@@ -30,7 +30,8 @@ setup steps live in `README.md`; this file is about the code.
 | `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` — pushing the dev machine's copy would clobber the Pi's actual state |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
 | `deploy.js` | Deployment script — reads Pi credentials from `.env.deploy`, pushes local code (including `.env`) to the Pi over SSH, and restarts the systemd service |
-| `glyph-editor/` | Dev-only glyph design tool for `drivers/font.js`, run via `npm run glyph-editor` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `drivers/font.js` live and serves it over `/api/font`) — not part of the deployed app |
+| `tools/glyph-editor/` | Dev-only glyph design tool for `drivers/font.js`, run via `npm run glyph-editor` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `drivers/font.js` live and serves it over `/api/font`) — not part of the deployed app |
+| `tools/pinmap/` | Dev-only CLI that reads `.env` and prints the RPi 3B 40-pin GPIO map with used/free pins, run via `npm run pinmap` — not part of the deployed app |
 
 ## Hardware-detection pattern
 
@@ -88,10 +89,10 @@ Runs on `:3000`. No test suite or linter is configured in this project.
   comments documenting each glyph's shape). Don't simplify or regenerate them without visually
   re-checking against the MAX7219.
 - `font.js` also exports a `CUSTOM` section for glyphs outside Latin/Cyrillic, meant to be
-  populated via `glyph-editor/`.
+  populated via `tools/glyph-editor/`.
 - `drivers/` holds hardware-facing modules required by `server.js`/`keypad.js` at runtime, so
-  unlike `glyph-editor/` it is **not** in `deploy.js`'s exclude list.
-- `deploy.js` excludes the whole `glyph-editor/` directory — it's dev-only and must never reach the Pi.
+  unlike `tools/` it is **not** in `deploy.js`'s exclude list.
+- `deploy.js` excludes the whole `tools/` directory — it's dev-only and must never reach the Pi.
 - `drivers/audio.js` requires the `mpg123` system binary on the Pi (`sudo apt install
   mpg123`); if missing, S4/S5/S6 just log a stub line instead of playing anything.
 - S7's switch is flaky (previously tested as hardware-faulty, which is why its sound-button role
