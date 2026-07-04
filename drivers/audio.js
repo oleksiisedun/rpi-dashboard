@@ -100,6 +100,26 @@ function playRandom(folder) {
 }
 
 /**
+ * Play a single specific audio file, but only if nothing is currently
+ * playing. Unlike playRandom, this never queues or interrupts an active
+ * player — if one is already running, the call is a silent no-op.
+ * @param {string} filePath - absolute path to the .mp3 file to play
+ * @returns {void}
+ */
+function playFile(filePath) {
+  if (!available) {
+    console.log(`[Audio stub] would play: ${filePath}`);
+    return;
+  }
+  if (currentPlayer) return; // busy — skip this call entirely, no queue/interrupt
+  if (!fs.existsSync(filePath)) {
+    console.warn(`[Audio] file not found: ${filePath}`);
+    return;
+  }
+  spawnPlayer(filePath, path.basename(filePath));
+}
+
+/**
  * Stop any currently playing or queued sound.
  * @returns {void}
  */
@@ -111,4 +131,4 @@ function stop() {
   }
 }
 
-module.exports = { available, playRandom, stop };
+module.exports = { available, playRandom, playFile, stop };

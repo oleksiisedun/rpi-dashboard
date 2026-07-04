@@ -18,6 +18,12 @@
  * on the MAX7219.
  * Each LED (1-8) mirrors its corresponding button's held state, lighting up
  * while Si is pressed and turning off on release.
+ * Independently of button presses (and of whether the TM1638 hardware is
+ * present at all), a keepalive timer plays sounds/tick.mp3 through
+ * drivers/audio.js every AUDIO_TICK_INTERVAL_MS (default 60s) as long as
+ * nothing else is currently playing — ticks are silently skipped while
+ * audio is busy, never queued or interrupting. This exists purely to keep
+ * a paired Bluetooth speaker from sleeping; disable via AUDIO_TICK_ENABLED=false.
  */
 
 const path = require("path");
@@ -34,6 +40,7 @@ const SOUND_DIRS = {
   S5: path.join(__dirname, "sounds", "S5"),
   S6: path.join(__dirname, "sounds", "S6"),
 };
+const TICK_FILE = path.join(__dirname, "sounds", "tick.mp3");
 
 let tm = null;
 let available = false;
@@ -188,6 +195,30 @@ function handleS8Press() {
   audio.stop();
 }
 
+// ── Keepalive tick — periodic silent-if-busy tick to keep BT speaker awake ──
+
+let tickInterval = null;
+
+/**
+ * Play sounds/tick.mp3 through the audio subsystem, skipped entirely if
+ * something else is already playing (never queues/interrupts).
+ * @returns {void}
+ */
+function playTick() {
+  audio.playFile(TICK_FILE);
+}
+
+/**
+ * Start the keepalive tick interval if enabled in config. Runs
+ * unconditionally regardless of TM1638 availability — the Bluetooth-speaker
+ * keepalive concern is independent of whether the physical keypad is attached.
+ * @returns {void}
+ */
+function startTick() {
+  if (!config.audio.TICK_ENABLED) return;
+  tickInterval = setInterval(playTick, config.audio.TICK_INTERVAL_MS);
+}
+
 // ── S7 press → restart the rpi-dashboard service ───────────────────────────
 
 /**
@@ -293,10 +324,12 @@ function stop() {
   if (pollHandle)    { clearInterval(pollHandle);    pollHandle    = null; }
   if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
   if (clearTimer)    { clearTimeout(clearTimer);     clearTimer    = null; }
+  if (tickInterval)  { clearInterval(tickInterval);  tickInterval  = null; }
   clearDigits();
 }
 
 start();
 if (available) startClock();
+startTick();
 
 module.exports = { available, stop, onS2Press, onS3Press };
