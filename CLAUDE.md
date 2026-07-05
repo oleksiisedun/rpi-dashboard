@@ -103,14 +103,18 @@ Runs on `:3000`. No test suite or linter is configured in this project.
   password piped in (unlike `deploy.js`'s SSH-based restart) — it relies on a NOPASSWD sudoers
   rule scoped to that exact command (see README's "Auto-start with systemd"). Without that rule,
   the restart fails and logs an error instead of hanging on a password prompt.
-- `server.js`'s `getWifiCredentials()` (S3 handler) runs `sudo nmcli device wifi
-  show-password` — `nmcli` returns the SSID to any caller but only returns the
-  secret to a polkit-authorized session, which an unattended systemd service
-  doesn't have (unlike an interactive SSH session, which is authorized and gets
-  the password fine without `sudo`). Needs its own NOPASSWD sudoers rule (see
-  README's "Auto-start with systemd"); without it, S3 shows `(open)` because the
-  `Password:` line is silently missing from the output, not because the network
-  is actually open.
+- `server.js`'s `getWifiCredentials()` runs `sudo nmcli device wifi show-password` —
+  `nmcli` returns the SSID to any caller but only returns the secret to a
+  polkit-authorized session, which an unattended systemd service doesn't have
+  (unlike an interactive SSH session, which is authorized and gets the password
+  fine without `sudo`). Needs its own NOPASSWD sudoers rule (see README's
+  "Auto-start with systemd"); without it, the cached credentials show `(open)`
+  because the `Password:` line is silently missing from the output, not because
+  the network is actually open. It's called once at startup by
+  `refreshWifiCredentials()` and cached in `cachedWifiCreds` — S3 reads that cache
+  instead of re-running `nmcli` on every press, so the password only updates on a
+  service restart (S7, a redeploy, or a manual restart) and S3 no-ops with a
+  warning if pressed before the startup fetch has completed.
 - `drivers/audio.js` invokes `mpg123 -o pulse` (not plain ALSA) because a Bluetooth speaker
   has no raw ALSA hw device — it's only reachable through PipeWire/PulseAudio. That means the
   systemd service needs `Environment=XDG_RUNTIME_DIR=/run/user/<uid>` and

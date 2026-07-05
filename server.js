@@ -78,6 +78,11 @@ if (persistedDisplay) {
   if (persistedDisplay.displaySettings) displaySettings = persistedDisplay.displaySettings;
 }
 
+// Wi-Fi credentials for the S3 overlay — fetched once at startup (see
+// refreshWifiCredentials() below) and cached here so S3 press is an instant cache
+// read instead of a per-press `sudo nmcli` round trip.
+let cachedWifiCreds = null;
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 /**
@@ -281,18 +286,31 @@ async function getWifiCredentials() {
 }
 
 /**
- * Show the current Wi-Fi network's password on the MAX7219 for OVERLAY_DURATION_MS.
+ * Fetches Wi-Fi credentials via `getWifiCredentials()` and stores them in `cachedWifiCreds`.
+ * Called once at startup so S3 press never has to wait on the `sudo nmcli` round trip.
  * @returns {Promise<void>}
  */
-async function handleS3Press() {
-  const creds = await getWifiCredentials();
-  if (!creds) {
-    console.warn("[Display] S3 pressed but no active Wi-Fi connection was found");
+async function refreshWifiCredentials() {
+  cachedWifiCreds = await getWifiCredentials();
+  if (cachedWifiCreds) {
+    console.log(`[WiFi] cached credentials for "${cachedWifiCreds.ssid}"`);
+  } else {
+    console.warn("[WiFi] no active Wi-Fi connection found at startup — S3 will no-op until this succeeds");
+  }
+}
+
+/**
+ * Show the current Wi-Fi network's cached password on the MAX7219 for OVERLAY_DURATION_MS.
+ * @returns {void}
+ */
+function handleS3Press() {
+  if (!cachedWifiCreds) {
+    console.warn("[Display] S3 pressed but no cached Wi-Fi credentials are available yet");
     return;
   }
 
-  console.log(`[Display] S3 pressed — showing password for "${creds.ssid}" for ${OVERLAY_DURATION_MS / 1000}s: "${creds.password}"`);
-  showOverlay(creds.password);
+  console.log(`[Display] S3 pressed — showing password for "${cachedWifiCreds.ssid}" for ${OVERLAY_DURATION_MS / 1000}s: "${cachedWifiCreds.password}"`);
+  showOverlay(cachedWifiCreds.password);
 }
 
 keypad.onS3Press(handleS3Press);
@@ -303,6 +321,8 @@ if (displayState.active) {
   console.log(`[Display] Restoring previous display: "${displayState.text}"`);
   display.startScroll(displayState.text, displaySettings);
 }
+
+refreshWifiCredentials();
 
 // ─── Cleanup on exit ──────────────────────────────────────────────────────────
 
