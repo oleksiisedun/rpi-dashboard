@@ -296,3 +296,10 @@ without a Pi connected. `drivers/audio.js` follows the same pattern for a missin
 (it's independent of the TM1638), so a dev machine without `mpg123` will log a
 `[Audio stub] would play: .../tick.mp3` line once a minute — set
 `AUDIO_TICK_ENABLED=false` in `.env` if that's noisy.
+
+---
+
+## Related guides
+
+- [`docs/file-server-setup.md`](docs/file-server-setup.md) — setting up this same
+  Pi as a Samba network file share, independent of the dashboard app.
