@@ -2,7 +2,9 @@
 
 A small Node/Express app that turns a Raspberry Pi into a local network dashboard with three
 subsystems: TOTP 2FA code generation (via `oathtool`), a MAX7219 LED matrix scrolling-text
-display (SPI), and a TM1638 LED&KEY keypad (bit-banged GPIO) whose S1 button shows the TOTP
+display (SPI) that can also run a web-UI-only ambient mode (two generative animations —
+wave/ripple, spiral/plasma — mutually exclusive with scrolling text),
+and a TM1638 LED&KEY keypad (bit-banged GPIO) whose S1 button shows the TOTP
 code on the 7-segment digits, whose S2 button shows the Pi's LAN IP and port on the MAX7219,
 whose S3 button shows the current Wi-Fi network's password on the MAX7219,
 whose S4, S5, and S6 buttons each play a random sound from their own
@@ -18,18 +20,19 @@ setup steps live in `README.md`; this file is about the code.
 
 | File | Responsibility |
 |---|---|
-| `config.js` | Single place for tunable values (durations, intervals, default display settings, GPIO pins, ports, secret defaults, audio-tick toggle/interval, deploy path/exclusions) used by `server.js`/`display.js`/`keypad.js`/`deploy.js`. All tunable values read from `.env` via `process.env` with sensible defaults; pin values use `requirePin()` which logs an error (rather than silently using a wrong default) if the env var is missing. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
+| `config.js` | Single place for tunable values (durations, intervals, default display/ambient settings, GPIO pins, ports, secret defaults, audio-tick toggle/interval, deploy path/exclusions) used by `server.js`/`display.js`/`ambient.js`/`keypad.js`/`deploy.js`. All tunable values read from `.env` via `process.env` with sensible defaults; pin values use `requirePin()` which logs an error (rather than silently using a wrong default) if the env var is missing. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
 | `.env` | App config — display settings, GPIO pins, timing durations, `TOTP_SECRET`. Gitignored (per-machine values) but **deployed** to the Pi by `deploy.js` so both machines have their own copy. Copy from `.env.example` to get started |
 | `.env.deploy` | Deploy credentials — `PI_HOST`, `PI_USER`, `PI_PASSWORD`, `PI_PATH`. Dev-only; gitignored and excluded from `deploy.js` so it never reaches the Pi. Copy from `.env.deploy.example` |
-| `server.js` | Loads `.env` into `process.env` via `require("dotenv").config()` as its first line (so `config.js`'s reads are populated regardless of how the process was started — systemd unit, `npm start`, or a bare shell), then the Express app, all HTTP routes, in-memory `displayState`/`displaySettings` (persisted to `.display-state.json` and restored on boot), SIGINT/SIGTERM cleanup |
-| `drivers/display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop |
+| `server.js` | Loads `.env` into `process.env` via `require("dotenv").config()` as its first line (so `config.js`'s reads are populated regardless of how the process was started — systemd unit, `npm start`, or a bare shell), then the Express app, all HTTP routes, in-memory `displayState`/`displaySettings`/`ambientState` (persisted to `.display-state.json` and restored on boot — ambient wins if both were somehow active), SIGINT/SIGTERM cleanup |
+| `drivers/display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop. Exports `pushFrame`/`setBrightness`/`clearHardware` (aliases of its private `_pushFrame`/`_setBrightness`/`_clearHardware`) so `drivers/ambient.js` can render through the same SPI primitives without opening its own hardware handle |
+| `drivers/ambient.js` | Generative ambient animations for the MAX7219 — `wave`/`plasma`, each an `init()`/`tick(state, t)` pair producing a 32-byte column-frame + brightness value. Runs its own recursive-`setTimeout` loop (same shape as `display.js`'s scroll loop) at `config.ambient.TICK_MS`, rendering via `drivers/display.js`'s exported primitives. Mutually exclusive with `startScroll` — enforced by `server.js`, not by this module |
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js`; its `CUSTOM` export is also read directly by `server.js` for the `/api/custom-symbols` route |
 | `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
 | `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3`, `playFile(filePath)` plays one specific file only if nothing's already playing (silent no-op otherwise — no queue/interrupt), `stop()` kills whatever is currently playing/queued |
 | `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows current time/date (`HH.MMDD.MM`) on the 7-segment digits by default (1 s update interval), shows TOTP on digits on S1 for `TOTP_SHOW_DURATION_MS` then resumes the clock, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, stops any playing sound on S8, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S3 (`onS3Press`), and independently runs a keepalive timer (`AUDIO_TICK_ENABLED`/`AUDIO_TICK_INTERVAL_MS`, default on/60s) that plays `sounds/tick.mp3` via `drivers/audio.js`'s `playFile()` whenever nothing else is playing, regardless of TM1638 hardware presence |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
 | `sounds/` | `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 random-sound buttons, plus a `tick.mp3` used by the keepalive timer. Gitignored (per-machine content) but not excluded from `deploy.js`, so it deploys normally |
-| `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`, written on every `/api/display` start/stop and reloaded on boot so the matrix resumes its last text after a restart. Gitignored and excluded from `deploy.js` — pushing the dev machine's copy would clobber the Pi's actual state |
+| `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`/`ambientState`, written on every `/api/display` or `/api/ambient` start/stop and reloaded on boot so the matrix resumes its last text or ambient animation after a restart. Gitignored and excluded from `deploy.js` — pushing the dev machine's copy would clobber the Pi's actual state |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
 | `deploy.js` | Deployment script — reads Pi credentials from `.env.deploy`, pushes local code (including `.env`) to the Pi over SSH, and restarts the systemd service |
 | `tools/glyph-editor/` | Dev-only glyph design tool for `drivers/font.js`, run via `npm run glyph-editor` (`index.html`/`style.css`/`app.js` + `serve.js`, an Express server that reads `drivers/font.js` live and serves it over `/api/font`) — not part of the deployed app |
@@ -75,10 +78,13 @@ Runs on `:3000`. No test suite or linter is configured in this project.
 | Method | Route | Body | Description |
 |---|---|---|---|
 | GET  | `/api/totp` | — | Returns `{ code }` |
-| POST | `/api/display` | `{ text, speed?, brightness?, rotate?, direction? }` | Start scroll loop |
+| POST | `/api/display` | `{ text, speed?, brightness?, rotate?, direction? }` | Start scroll loop (stops ambient mode first) |
 | POST | `/api/display/stop` | — | Stop + clear MAX7219 display |
 | GET  | `/api/display/status` | — | Current MAX7219 state |
 | GET  | `/api/custom-symbols` | — | Returns `{ symbols }` — the literal characters in `font.js`'s `CUSTOM` set, for the frontend's symbol picker |
+| POST | `/api/ambient/start` | `{ animation, brightness? }` | Start an ambient animation — `animation` ∈ `ambient.ANIMATIONS` (`wave`/`plasma`) — stops scroll mode first |
+| POST | `/api/ambient/stop` | — | Stop + clear the ambient animation |
+| GET  | `/api/ambient/status` | — | Current ambient state |
 
 ## Known constraints / gotchas
 
@@ -127,3 +133,21 @@ Runs on `:3000`. No test suite or linter is configured in this project.
   `AUDIO_TICK_INTERVAL_MS` on a dev machine; set `AUDIO_TICK_ENABLED=false` locally if that's
   noisy. It also shares `drivers/audio.js`'s single `currentPlayer` slot with S4/S5/S6 — a tick
   during real sound playback is silently dropped, by design, not a bug.
+- Ambient mode and scrolling text are mutually exclusive on the MAX7219 and the exclusion is
+  enforced entirely in `server.js` (each route stops the other mode before persisting/starting)
+  — `drivers/display.js` and `drivers/ambient.js` don't know about each other. If S2/S3 fires an
+  overlay while ambient mode is active, `showOverlay()` stops ambient and does **not** resume it
+  after the overlay reverts — same accepted-interruption behavior scrolling text already has;
+  the user has to manually re-enable ambient mode.
+- The MAX7219 has no per-pixel PWM — only on/off per pixel plus one global `INTENSITY` register
+  (0-15). `drivers/ambient.js`'s animations (`wave`/`plasma`) render at a constant brightness and
+  vary which pixels are lit instead; a brightness-based effect would need to modulate
+  `INTENSITY` over time via `display.setBrightness()`.
+- `.display-state.json` is excluded from `deploy.js` and survives across deploys untouched (see
+  its file-map entry above), so a persisted `ambientState.animation` can reference a name that a
+  later deploy renamed or removed. `server.js`'s boot-restore block validates
+  `ambientState.animation` against `ambient.ANIMATIONS` and clears the persisted state (rather
+  than restoring it) if the name is unknown, instead of letting `ambient.start()` throw — an
+  uncaught throw there happens before `app.listen()`, which crashes the whole process, not just
+  ambient mode. Any future rename/removal of an animation id must keep going through this same
+  validated path.

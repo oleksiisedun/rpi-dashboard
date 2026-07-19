@@ -235,24 +235,29 @@ runs `npm install --production` there, and restarts the `rpi-dashboard` systemd 
 | Method | Route | Body | Description |
 |---|---|---|---|
 | GET  | `/api/totp` | — | Returns `{ code }` |
-| POST | `/api/display` | `{ text, speed?, brightness?, rotate?, direction? }` | Start scroll loop |
+| POST | `/api/display` | `{ text, speed?, brightness?, rotate?, direction? }` | Start scroll loop (stops ambient mode if running) |
 | POST | `/api/display/stop` | — | Stop + clear MAX7219 display |
 | GET  | `/api/display/status` | — | Current MAX7219 state |
+| POST | `/api/ambient/start` | `{ animation, brightness? }` | Start an ambient animation (stops scroll loop if running) |
+| POST | `/api/ambient/stop` | — | Stop the ambient animation + clear MAX7219 display |
+| GET  | `/api/ambient/status` | — | Current ambient mode state |
 
 `speed` = ms per column shift (default 40). `brightness` = 0–15 (default 5).
 `direction` = `'rtl'` (default) or `'ltr'`.
+`animation` = one of `'wave'`, `'plasma'`.
 
 ---
 
 ## Architecture
 
-`server.js` is the central hub: it exposes the HTTP API consumed by the browser frontend and registers S2/S3 overlay callbacks on `keypad.js`. `keypad.js` runs its own polling loop against `drivers/tm1638.js` and dispatches button presses to `totp.js`, `drivers/audio.js`, or back to `server.js` via those callbacks. Both `server.js` and `keypad.js` share the `totp.js` `oathtool` wrapper; `server.js` drives `drivers/display.js`, which reads glyph bitmaps from `drivers/font.js` before writing scroll frames over SPI. All tunable values are read from `.env` via `config.js`.
+`server.js` is the central hub: it exposes the HTTP API consumed by the browser frontend and registers S2/S3 overlay callbacks on `keypad.js`. `keypad.js` runs its own polling loop against `drivers/tm1638.js` and dispatches button presses to `totp.js`, `drivers/audio.js`, or back to `server.js` via those callbacks. Both `server.js` and `keypad.js` share the `totp.js` `oathtool` wrapper; `server.js` drives `drivers/display.js`, which reads glyph bitmaps from `drivers/font.js` before writing scroll frames over SPI. `server.js` also drives `drivers/ambient.js` for generative ambient animations, which shares the same SPI frame-push primitives from `drivers/display.js` rather than talking to the hardware directly — the two are mutually exclusive, and `server.js` enforces that by stopping one before starting the other. All tunable values are read from `.env` via `config.js`.
 
 ```mermaid
 graph TD
   Browser["Browser\n(index.html)"] -->|HTTP REST| Server["server.js\nExpress app"]
 
   Server --> Display["drivers/display.js\nMAX7219 SPI scroll"]
+  Server --> Ambient["drivers/ambient.js\nambient animations"]
   Server --> TOTP["totp.js\noathtool wrapper"]
 
   Keypad["keypad.js\nbutton polling"] --> TM["drivers/tm1638.js\nbit-banged GPIO"]
@@ -262,12 +267,14 @@ graph TD
 
   Display --> Font["drivers/font.js\nbitmap glyphs"]
   Display --> HW1[("MAX7219\nLED matrix")]
+  Ambient -->|pushFrame / setBrightness| Display
   TM --> HW2[("TM1638\nLED & KEY")]
   Audio --> HW3[("Speaker\n/ Bluetooth")]
 
   Config[".env / config.js\ntunable values"] -.-> Server
   Config -.-> Keypad
   Config -.-> Display
+  Config -.-> Ambient
 ```
 
 ---
@@ -278,6 +285,7 @@ graph TD
 |---|---|
 | `server.js` | Express app, HTTP routes |
 | `drivers/display.js` | MAX7219 driver (SPI, scrolling) |
+| `drivers/ambient.js` | Generative ambient animations (wave, plasma) — renders via `drivers/display.js`'s SPI frame primitives |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
 | `drivers/audio.js` | `mpg123`-based random sound playback for the S4/S5/S6 buttons, `playFile()` for the keepalive tick, plus `stop()` for the S8 button |
@@ -291,7 +299,10 @@ graph TD
 
 Both `drivers/display.js` and `drivers/tm1638.js`/`keypad.js` detect missing SPI/GPIO
 and fall back to stub/log mode, so you can develop on any machine
-without a Pi connected. `drivers/audio.js` follows the same pattern for a missing
+without a Pi connected. `drivers/ambient.js` reuses `drivers/display.js`'s SPI
+detection (it renders through `display.js`'s frame-push primitives rather than
+opening its own SPI handle), so ambient animations get the same stub-mode
+fallback automatically. `drivers/audio.js` follows the same pattern for a missing
 `mpg123` binary. Note the keepalive tick keeps running in this stub mode too
 (it's independent of the TM1638), so a dev machine without `mpg123` will log a
 `[Audio stub] would play: .../tick.mp3` line once a minute — set
