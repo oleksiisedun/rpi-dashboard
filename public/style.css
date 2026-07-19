@@ -127,6 +127,46 @@ input[type=range]::-webkit-slider-thumb {
   border-color: var(--accent); color: var(--accent);
 }
 
+/* Ambient mode toggle */
+.card-header .switch-label { margin-left: auto; }
+.switch-label {
+  display: flex; align-items: center; gap: 10px;
+  cursor: pointer; font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  user-select: none;
+}
+.switch-label input[type=checkbox] { display: none; }
+.switch-track {
+  width: 36px; height: 20px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--border);
+  position: relative; transition: border-color 0.2s, background 0.2s;
+}
+.switch-thumb {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--muted);
+  transition: left 0.2s, background 0.2s;
+}
+.switch-label:has(input:checked) .switch-track {
+  border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--bg));
+}
+.switch-label:has(input:checked) .switch-thumb {
+  left: 18px; background: var(--accent); box-shadow: 0 0 6px var(--accent);
+}
+
+.ambient-panel { margin-top: 14px; }
+.ambient-anim-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.anim-chip {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 10px 8px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.anim-chip:hover { border-color: var(--accent); }
+.anim-chip.active {
+  border-color: var(--accent); color: var(--accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
 .symbol-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .symbol-chip {
   font-family: var(--mono); font-size: 15px; line-height: 1;

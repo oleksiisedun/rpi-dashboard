@@ -36,48 +36,70 @@
       <div class="card-header">
         <span class="card-tag">02</span>
         <span class="card-title">LED Matrix Display</span>
+        <label class="switch-label">
+          <input type="checkbox" id="ambientToggle" onchange="onAmbientToggle()">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          Ambient Mode
+        </label>
       </div>
       <div class="card-body">
-        <div class="field-label">Text to scroll (Latin &amp; Ukrainian)</div>
-        <textarea id="displayText" placeholder="Введіть текст або Enter text..."></textarea>
+        <div class="scroll-controls" id="scrollControls">
+          <div class="field-label">Text to scroll (Latin &amp; Ukrainian)</div>
+          <textarea id="displayText" placeholder="Введіть текст або Enter text..."></textarea>
 
-        <div class="controls-row">
-          <div class="control-group">
-            <label>Speed <span id="speedVal">40 ms/col</span></label>
-            <input type="range" id="speedSlider" min="15" max="120" value="40"
-                   oninput="document.getElementById('speedVal').textContent = this.value + ' ms/col'">
+          <div class="controls-row">
+            <div class="control-group">
+              <label>Speed <span id="speedVal">40 ms/col</span></label>
+              <input type="range" id="speedSlider" min="15" max="120" value="40"
+                     oninput="document.getElementById('speedVal').textContent = this.value + ' ms/col'">
+            </div>
+            <div class="control-group">
+              <label>Brightness <span id="brightVal">5 / 15</span></label>
+              <input type="range" id="brightSlider" min="0" max="15" value="5"
+                     oninput="document.getElementById('brightVal').textContent = this.value + ' / 15'">
+            </div>
           </div>
-          <div class="control-group">
-            <label>Brightness <span id="brightVal">5 / 15</span></label>
-            <input type="range" id="brightSlider" min="0" max="15" value="5"
-                   oninput="document.getElementById('brightVal').textContent = this.value + ' / 15'">
+
+          <div class="rotate-row">
+            <label class="rotate-label">
+              <input type="checkbox" id="rotateCheck">
+              <span class="rotate-box">⟳</span>
+              Rotate 180°
+            </label>
+            <label class="rotate-label">
+              <input type="checkbox" id="dirCheck">
+              <span class="rotate-box">←</span>
+              Left-to-right
+            </label>
+          </div>
+
+          <div class="field-label" style="margin-top:14px;">Custom symbols (click to insert)</div>
+          <div class="symbol-row" id="symbolRow"></div>
+
+          <div class="display-actions">
+            <button class="btn btn-send" id="sendBtn" onclick="sendDisplay()">▶ Send</button>
+            <button class="btn btn-stop" id="stopBtn" onclick="stopDisplay()" disabled>■ Stop</button>
           </div>
         </div>
 
-        <div class="rotate-row">
-          <label class="rotate-label">
-            <input type="checkbox" id="rotateCheck">
-            <span class="rotate-box">⟳</span>
-            Rotate 180°
-          </label>
-          <label class="rotate-label">
-            <input type="checkbox" id="dirCheck">
-            <span class="rotate-box">←</span>
-            Left-to-right
-          </label>
-        </div>
+        <div class="ambient-panel" id="ambientPanel" hidden>
+          <div class="field-label">Animation</div>
+          <div class="ambient-anim-row">
+            <button type="button" class="anim-chip" data-anim="wave">Wave / Ripple</button>
+            <button type="button" class="anim-chip" data-anim="plasma">Spiral / Plasma</button>
+          </div>
 
-        <div class="field-label" style="margin-top:14px;">Custom symbols (click to insert)</div>
-        <div class="symbol-row" id="symbolRow"></div>
+          <div class="control-group" style="margin-top:14px;">
+            <label>Brightness <span id="ambientBrightVal">8 / 15</span></label>
+            <input type="range" id="ambientBrightSlider" min="0" max="15" value="8"
+                   oninput="document.getElementById('ambientBrightVal').textContent = this.value + ' / 15'"
+                   onchange="onAmbientBrightnessChange()">
+          </div>
+        </div>
 
         <div class="display-status">
           <div class="status-dot" id="statusDot"></div>
           <span id="statusText">Idle</span>
-        </div>
-
-        <div class="display-actions">
-          <button class="btn btn-send" id="sendBtn" onclick="sendDisplay()">▶ Send</button>
-          <button class="btn btn-stop" id="stopBtn" onclick="stopDisplay()" disabled>■ Stop</button>
         </div>
       </div>
     </div>
@@ -161,6 +183,63 @@
     document.getElementById('statusDot').className = 'status-dot' + (active ? ' active' : '');
   }
 
+  let ambientAnimation = 'wave';
+
+  function setScrollControlsHidden(hide) {
+    document.getElementById('scrollControls').hidden = hide;
+    // Leaving ambient mode never leaves scrolling text active (mutual exclusion is
+    // enforced server-side), so Stop should stay disabled rather than reflecting
+    // whatever state it was left in before ambient mode was toggled on.
+    if (!hide) document.getElementById('stopBtn').disabled = true;
+  }
+
+  async function onAmbientToggle() {
+    const on = document.getElementById('ambientToggle').checked;
+    document.getElementById('ambientPanel').hidden = !on;
+    setScrollControlsHidden(on);
+    if (on) await startAmbient(ambientAnimation);
+    else    await stopAmbient();
+  }
+
+  async function startAmbient(animation) {
+    ambientAnimation = animation;
+    highlightAnimChip(animation);
+    const brightness = parseInt(document.getElementById('ambientBrightSlider').value);
+    try {
+      const res  = await fetch('/api/ambient/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ animation, brightness }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Server error');
+      setStatus(`Ambient: ${animation} running`, true);
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, false);
+    }
+  }
+
+  async function onAmbientBrightnessChange() {
+    if (document.getElementById('ambientToggle').checked) await startAmbient(ambientAnimation);
+  }
+
+  async function stopAmbient() {
+    try {
+      await fetch('/api/ambient/stop', { method: 'POST' });
+      setStatus('Idle', false);
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, false);
+    }
+  }
+
+  function highlightAnimChip(name) {
+    document.querySelectorAll('.anim-chip').forEach(c => c.classList.toggle('active', c.dataset.anim === name));
+  }
+
+  document.querySelectorAll('.anim-chip').forEach(chip => {
+    chip.onclick = () => startAmbient(chip.dataset.anim);
+  });
+
   function insertSymbol(sym) {
     const ta    = document.getElementById('displayText');
     const start = ta.selectionStart ?? ta.value.length;
@@ -189,6 +268,23 @@
   loadCustomSymbols();
 
   (async () => {
+    try {
+      const ambientRes  = await fetch('/api/ambient/status');
+      const ambientData = await ambientRes.json();
+      if (ambientData.active) {
+        document.getElementById('ambientToggle').checked = true;
+        document.getElementById('ambientPanel').hidden = false;
+        setScrollControlsHidden(true);
+        highlightAnimChip(ambientData.animation);
+        if (ambientData.brightness !== undefined) {
+          document.getElementById('ambientBrightSlider').value = ambientData.brightness;
+          document.getElementById('ambientBrightVal').textContent = ambientData.brightness + ' / 15';
+        }
+        setStatus(`Ambient: ${ambientData.animation} running`, true);
+        return;
+      }
+    } catch (_) {}
+
     try {
       const res  = await fetch('/api/display/status');
       const data = await res.json();

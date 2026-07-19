@@ -39,6 +39,12 @@ module.exports = {
     OVERLAY_DURATION_MS: Number(process.env.DISPLAY_OVERLAY_DURATION_MS) || 60000,
   },
 
+  ambient: {
+    TICK_MS: Number(process.env.AMBIENT_TICK_MS) || 80,
+    DEFAULT_ANIMATION: process.env.AMBIENT_DEFAULT_ANIMATION || "wave",
+    DEFAULT_BRIGHTNESS: Number(process.env.AMBIENT_DEFAULT_BRIGHTNESS) || 8,
+  },
+
   keypad: {
     TM1638_STB_PIN: requirePin("TM1638_STB_PIN"),
     TM1638_CLK_PIN: requirePin("TM1638_CLK_PIN"),

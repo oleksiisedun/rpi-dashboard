@@ -19,22 +19,23 @@ const OVERLAY_DURATION_MS = config.display.OVERLAY_DURATION_MS;
 const DISPLAY_STATE_PATH = path.join(__dirname, ".display-state.json");
 
 /**
- * Persists the current display state and settings to disk so they survive a restart.
+ * Persists the current display state, settings, and ambient state to disk so they survive a restart.
  * @param {object} displayState
  * @param {object} displaySettings
+ * @param {object} ambientState
  * @returns {void}
  */
-function saveDisplayState(displayState, displaySettings) {
+function saveDisplayState(displayState, displaySettings, ambientState) {
   try {
-    fs.writeFileSync(DISPLAY_STATE_PATH, JSON.stringify({ displayState, displaySettings }));
+    fs.writeFileSync(DISPLAY_STATE_PATH, JSON.stringify({ displayState, displaySettings, ambientState }));
   } catch (e) {
     console.warn(`[Display] Could not save state to ${DISPLAY_STATE_PATH}: ${e.message}`);
   }
 }
 
 /**
- * Loads the persisted display state and settings from disk, if present.
- * @returns {{ displayState: object, displaySettings: object }|null}
+ * Loads the persisted display state, settings, and ambient state from disk, if present.
+ * @returns {{ displayState: object, displaySettings: object, ambientState?: object }|null}
  */
 function loadDisplayState() {
   try {
@@ -53,6 +54,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const { generateTOTP } = require("./totp");
 const display = require("./drivers/display");
+const ambient = require("./drivers/ambient");
 const { CUSTOM } = require("./drivers/font");
 const keypad  = require("./keypad"); // S1 button → shows TOTP on 7-segment for 15s
 
@@ -73,10 +75,20 @@ let displaySettings = {
   direction: config.display.DEFAULT_DIRECTION,
 };
 
+// Ambient mode state — mutually exclusive with displayState (see mutual-exclusion
+// handling in the /api/display and /api/ambient/* routes below).
+let ambientState = {
+  active: false,
+  animation: config.ambient.DEFAULT_ANIMATION,
+  brightness: config.ambient.DEFAULT_BRIGHTNESS,
+  startedAt: null,
+};
+
 const persistedDisplay = loadDisplayState();
 if (persistedDisplay) {
   if (persistedDisplay.displayState) displayState = persistedDisplay.displayState;
   if (persistedDisplay.displaySettings) displaySettings = persistedDisplay.displaySettings;
+  if (persistedDisplay.ambientState) ambientState = persistedDisplay.ambientState;
 }
 
 // Wi-Fi credentials for the S3 overlay — fetched once at startup (see
@@ -137,6 +149,10 @@ app.post("/api/display", (req, res) => {
 
   cancelOverlayRevert();
 
+  // Mutual exclusion: scrolling text always wins over ambient mode.
+  ambient.stop();
+  ambientState = { ...ambientState, active: false, startedAt: null };
+
   displayState = {
     active: true,
     text: text.trim(),
@@ -147,7 +163,7 @@ app.post("/api/display", (req, res) => {
     startedAt: new Date().toISOString(),
   };
   displaySettings = { speed, brightness, rotate, direction };
-  saveDisplayState(displayState, displaySettings);
+  saveDisplayState(displayState, displaySettings, ambientState);
 
   console.log(`[Display] Starting loop: "${displayState.text}" dir=${direction} rotate=${rotate}`);
 
@@ -167,7 +183,7 @@ app.post("/api/display/stop", (req, res) => {
   cancelOverlayRevert();
   display.stop();
   displayState = { active: false, text: "", startedAt: null };
-  saveDisplayState(displayState, displaySettings);
+  saveDisplayState(displayState, displaySettings, ambientState);
   res.json({ ok: true, message: "Display stopped." });
 });
 
@@ -189,6 +205,61 @@ app.get("/api/display/status", (req, res) => {
  */
 app.get("/api/custom-symbols", (req, res) => {
   res.json({ symbols: Object.keys(CUSTOM) });
+});
+
+/**
+ * POST /api/ambient/start — stop any scrolling text and start an ambient animation.
+ * Body: { animation: string (one of ambient.ANIMATIONS), brightness?: number (0-15) }
+ * @param {express.Request} req
+ * @param {express.Response} res
+ * @returns {void}
+ */
+app.post("/api/ambient/start", (req, res) => {
+  const { animation, brightness = config.ambient.DEFAULT_BRIGHTNESS } = req.body;
+  if (!ambient.ANIMATIONS.includes(animation)) {
+    return res.status(400).json({ error: `animation must be one of: ${ambient.ANIMATIONS.join(", ")}` });
+  }
+  if (typeof brightness !== "number" || brightness < 0 || brightness > 15) {
+    return res.status(400).json({ error: "brightness must be a number between 0 and 15." });
+  }
+
+  cancelOverlayRevert();
+
+  // Mutual exclusion: ambient mode always wins over scrolling text.
+  display.stop();
+  displayState = { active: false, text: "", startedAt: null };
+
+  ambientState = { active: true, animation, brightness, startedAt: new Date().toISOString() };
+  saveDisplayState(displayState, displaySettings, ambientState);
+
+  console.log(`[Ambient] Starting animation: ${animation}`);
+  ambient.start(animation, { brightness });
+
+  res.json({ ok: true, message: `Ambient mode: ${animation}` });
+});
+
+/**
+ * POST /api/ambient/stop — stop the ambient animation and clear the MAX7219 panel.
+ * @param {express.Request} req
+ * @param {express.Response} res
+ * @returns {void}
+ */
+app.post("/api/ambient/stop", (req, res) => {
+  console.log(`[Ambient] Stopping animation.`);
+  ambient.stop();
+  ambientState = { ...ambientState, active: false, startedAt: null };
+  saveDisplayState(displayState, displaySettings, ambientState);
+  res.json({ ok: true, message: "Ambient mode stopped." });
+});
+
+/**
+ * GET /api/ambient/status — returns the current ambient mode state.
+ * @param {express.Request} req
+ * @param {express.Response} res
+ * @returns {void}
+ */
+app.get("/api/ambient/status", (req, res) => {
+  res.json(ambientState);
 });
 
 // ─── S2 button → temporary matrix overlay ──────────────────────────────────────
@@ -218,6 +289,15 @@ function cancelOverlayRevert() {
 function showOverlay(text) {
   if (!overlayRevertTimer) {
     preOverlayState = { active: displayState.active, text: displayState.text };
+  }
+
+  // If ambient mode was running, it's interrupted and does NOT resume after the
+  // overlay reverts — same accepted-interruption behavior scrolling text already
+  // has today. Not a bug; user re-enables ambient mode manually.
+  if (ambientState.active) {
+    ambient.stop();
+    ambientState = { ...ambientState, active: false, startedAt: null };
+    saveDisplayState(displayState, displaySettings, ambientState);
   }
 
   display.startScroll(text, displaySettings);
@@ -318,7 +398,19 @@ keypad.onS3Press(handleS3Press);
 
 // ─── Restore display state from before the last restart ───────────────────────
 
-if (displayState.active) {
+// A persisted animation name can go stale across a deploy that renames/removes
+// animations (the state file survives deploys — see config.js's deploy exclusions).
+// Sanitize before restoring so a stale name can't crash startup.
+if (ambientState.active && !ambient.ANIMATIONS.includes(ambientState.animation)) {
+  console.warn(`[Ambient] Persisted animation "${ambientState.animation}" no longer exists — clearing instead of restoring.`);
+  ambientState = { ...ambientState, active: false, startedAt: null };
+  saveDisplayState(displayState, displaySettings, ambientState);
+}
+
+if (ambientState.active) {
+  console.log(`[Ambient] Restoring ambient animation: ${ambientState.animation}`);
+  ambient.start(ambientState.animation, { brightness: ambientState.brightness });
+} else if (displayState.active) {
   console.log(`[Display] Restoring previous display: "${displayState.text}"`);
   display.startScroll(displayState.text, displaySettings);
 }
@@ -327,8 +419,8 @@ refreshWifiCredentials();
 
 // ─── Cleanup on exit ──────────────────────────────────────────────────────────
 
-process.on("SIGINT",  () => { display.stop(); keypad.stop(); process.exit(0); });
-process.on("SIGTERM", () => { display.stop(); keypad.stop(); process.exit(0); });
+process.on("SIGINT",  () => { display.stop(); ambient.stop(); keypad.stop(); process.exit(0); });
+process.on("SIGTERM", () => { display.stop(); ambient.stop(); keypad.stop(); process.exit(0); });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 

@@ -236,4 +236,11 @@ function stop() {
   _clearHardware();
 }
 
-module.exports = { startScroll, stop, available };
+module.exports = {
+  startScroll,
+  stop,
+  available,
+  pushFrame: _pushFrame,
+  setBrightness: _setBrightness,
+  clearHardware: _clearHardware,
+};
