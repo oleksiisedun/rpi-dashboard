@@ -265,7 +265,7 @@ app.get("/api/ambient/status", (req, res) => {
 // ─── S2 button → temporary matrix overlay ──────────────────────────────────────
 
 let overlayRevertTimer = null;
-let preOverlayState = null; // { active, text } captured just before the current overlay started
+let preOverlayState = null; // snapshot of displayState/ambientState captured just before the current overlay started
 
 /**
  * Cancel any pending overlay revert, so a stale pre-overlay snapshot can't
@@ -281,19 +281,24 @@ function cancelOverlayRevert() {
 
 /**
  * Show text on the MAX7219 for OVERLAY_DURATION_MS, using the current web UI
- * matrix settings, then restore whatever was showing before (or stop if
- * nothing was active). Used by the S2 (LAN IP) overlay.
+ * matrix settings, then restore whatever was showing before — resuming ambient
+ * mode (with its animation/brightness) if that's what was interrupted, resuming
+ * scrolling text if that was active, or stopping if nothing was. Used by the S2
+ * (LAN IP) and S3 (Wi-Fi password) overlays.
  * @param {string} text
  * @returns {void}
  */
 function showOverlay(text) {
   if (!overlayRevertTimer) {
-    preOverlayState = { active: displayState.active, text: displayState.text };
+    preOverlayState = {
+      displayActive: displayState.active,
+      displayText: displayState.text,
+      ambientActive: ambientState.active,
+      ambientAnimation: ambientState.animation,
+      ambientBrightness: ambientState.brightness,
+    };
   }
 
-  // If ambient mode was running, it's interrupted and does NOT resume after the
-  // overlay reverts — same accepted-interruption behavior scrolling text already
-  // has today. Not a bug; user re-enables ambient mode manually.
   if (ambientState.active) {
     ambient.stop();
     ambientState = { ...ambientState, active: false, startedAt: null };
@@ -305,8 +310,22 @@ function showOverlay(text) {
   clearTimeout(overlayRevertTimer);
   overlayRevertTimer = setTimeout(() => {
     overlayRevertTimer = null;
-    if (preOverlayState.active) {
-      display.startScroll(preOverlayState.text, displaySettings);
+    if (preOverlayState.ambientActive) {
+      console.log(`[Ambient] Resuming ambient animation after overlay: ${preOverlayState.ambientAnimation}`);
+      // The overlay's scroll loop (display.js's own timer) is still running at
+      // this point — ambient.start() only clears ambient's timer, not display's,
+      // so it must be stopped explicitly or both loops render concurrently.
+      display.stop();
+      ambientState = {
+        active: true,
+        animation: preOverlayState.ambientAnimation,
+        brightness: preOverlayState.ambientBrightness,
+        startedAt: new Date().toISOString(),
+      };
+      saveDisplayState(displayState, displaySettings, ambientState);
+      ambient.start(preOverlayState.ambientAnimation, { brightness: preOverlayState.ambientBrightness });
+    } else if (preOverlayState.displayActive) {
+      display.startScroll(preOverlayState.displayText, displaySettings);
     } else {
       display.stop();
     }

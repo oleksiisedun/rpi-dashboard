@@ -135,10 +135,11 @@ Runs on `:3000`. No test suite or linter is configured in this project.
   during real sound playback is silently dropped, by design, not a bug.
 - Ambient mode and scrolling text are mutually exclusive on the MAX7219 and the exclusion is
   enforced entirely in `server.js` (each route stops the other mode before persisting/starting)
-  — `drivers/display.js` and `drivers/ambient.js` don't know about each other. If S2/S3 fires an
-  overlay while ambient mode is active, `showOverlay()` stops ambient and does **not** resume it
-  after the overlay reverts — same accepted-interruption behavior scrolling text already has;
-  the user has to manually re-enable ambient mode.
+  — `drivers/display.js` and `drivers/ambient.js` don't know about each other. `showOverlay()`
+  (S2/S3) snapshots whichever mode was active — including the ambient animation/brightness, not
+  just scrolling text — before showing the overlay, and resumes that same mode once
+  `OVERLAY_DURATION_MS` elapses, so an S2/S3 press only pauses ambient mode rather than
+  cancelling it.
 - The MAX7219 has no per-pixel PWM — only on/off per pixel plus one global `INTENSITY` register
   (0-15). `drivers/ambient.js`'s animations (`wave`/`plasma`) render at a constant brightness and
   vary which pixels are lit instead; a brightness-based effect would need to modulate
