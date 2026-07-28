@@ -1,3 +1,7 @@
+// Load .env first so config.js's requirePin() checks (for keypad/button pins
+// deploy.js itself never reads) don't spuriously warn — server.js loads .env
+// the same way, but deploy.js otherwise only loads .env.deploy.
+require("dotenv").config();
 require("dotenv").config({ path: ".env.deploy" });
 const path = require("path");
 const { NodeSSH } = require("node-ssh");
