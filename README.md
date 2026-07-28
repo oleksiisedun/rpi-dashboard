@@ -1,7 +1,8 @@
 # RPi Dashboard
 
 Local Node.js web dashboard for Raspberry Pi with:
-- **2FA code generation** via `oathtool` (web UI button + physical S1 button)
+- **2FA code generation** via `oathtool` (web UI button, physical TM1638 S1
+  button, or a standalone GPIO push-button wired independently of the TM1638)
 - **MAX7219 4×8×8 LED matrix** — scrolling text in Latin + Ukrainian Cyrillic
 - **TM1638 LED&KEY module** — press S1 to show the TOTP code on the 7-segment
   digits, press S2 to scroll this machine's LAN IP and port on the MAX7219,
@@ -42,6 +43,24 @@ Connect to the **IN** connector (rightmost on the PCB back).
 
 These pins don't conflict with the MAX7219's SPI0 pins.
 
+### Standalone TOTP push-button
+
+An independent button (not part of the TM1638) that also shows the TOTP code
+on the 7-segment digits, wired **normally-closed** — its two leads are
+connected at rest, and pressing it *breaks* the connection. This is the
+opposite polarity of a typical push-button, so don't wire it like a
+normally-open one.
+
+| Lead | RPi pin | GPIO |
+|---|---|---|
+| Lead A | Pin 15 | GPIO 22 |
+| Lead B | Any GND pin (e.g. Pin 14) | GND |
+
+No external resistor is needed — the Pi's internal pull-up on GPIO 22 holds
+the pin high, and the closed switch pulls it low at rest; pressing (opening
+the circuit) lets it float back high, which is what the driver detects as
+the press. Pin is configurable via `TOTP_BUTTON_PIN` in `.env`.
+
 ---
 
 ## Setup on Raspberry Pi
@@ -55,7 +74,7 @@ sudo raspi-config
 ls /dev/spi*   # should show /dev/spidev0.0
 ```
 
-### 2. GPIO group permissions (for the TM1638)
+### 2. GPIO group permissions (for the TM1638 and the standalone button)
 
 ```bash
 sudo usermod -a -G gpio pi
@@ -299,7 +318,8 @@ graph TD
 
 Both `drivers/display.js` and `drivers/tm1638.js`/`keypad.js` detect missing SPI/GPIO
 and fall back to stub/log mode, so you can develop on any machine
-without a Pi connected. `drivers/ambient.js` reuses `drivers/display.js`'s SPI
+without a Pi connected. `drivers/button.js` (the standalone TOTP button) follows
+the same pattern for its GPIO pin. `drivers/ambient.js` reuses `drivers/display.js`'s SPI
 detection (it renders through `display.js`'s frame-push primitives rather than
 opening its own SPI handle), so ambient animations get the same stub-mode
 fallback automatically. `drivers/audio.js` follows the same pattern for a missing

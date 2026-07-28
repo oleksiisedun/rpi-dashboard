@@ -5,7 +5,8 @@ subsystems: TOTP 2FA code generation (via `oathtool`), a MAX7219 LED matrix scro
 display (SPI) that can also run a web-UI-only ambient mode (two generative animations —
 wave/ripple, spiral/plasma — mutually exclusive with scrolling text),
 and a TM1638 LED&KEY keypad (bit-banged GPIO) whose S1 button shows the TOTP
-code on the 7-segment digits, whose S2 button shows the Pi's LAN IP and port on the MAX7219,
+code on the 7-segment digits — as does a standalone normally-closed push-button wired directly
+to its own GPIO pin, independent of the TM1638 (`drivers/button.js`) — whose S2 button shows the Pi's LAN IP and port on the MAX7219,
 whose S3 button shows the current Wi-Fi network's password on the MAX7219,
 whose S4, S5, and S6 buttons each play a random sound from their own
 folder (`sounds/S4/`, `sounds/S5/`, and `sounds/S6/`, via `mpg123`), whose S8 button stops
@@ -29,7 +30,8 @@ setup steps live in `README.md`; this file is about the code.
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js`; its `CUSTOM` export is also read directly by `server.js` for the `/api/custom-symbols` route |
 | `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
 | `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3`, `playFile(filePath)` plays one specific file only if nothing's already playing (silent no-op otherwise — no queue/interrupt), `stop()` kills whatever is currently playing/queued |
-| `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows current time/date (`HH.MMDD.MM`) on the 7-segment digits by default (1 s update interval), shows TOTP on digits on S1 for `TOTP_SHOW_DURATION_MS` then resumes the clock, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, stops any playing sound on S8, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S3 (`onS3Press`), and independently runs a keepalive timer (`AUDIO_TICK_ENABLED`/`AUDIO_TICK_INTERVAL_MS`, default on/60s) that plays `sounds/tick.mp3` via `drivers/audio.js`'s `playFile()` whenever nothing else is playing, regardless of TM1638 hardware presence |
+| `drivers/button.js` | Standalone normally-closed GPIO push-button, independent of the TM1638 — opens its pin (`config.button.PIN`) with an internal pull-up and `rpio.poll()`s for the rising edge (press = circuit opens = pin goes high), debouncing in software. Exports `{ available, onPress(handler), stop() }`; `keypad.js` registers `handleS1Press` as its press handler so the button mimics S1 |
+| `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows current time/date (`HH.MMDD.MM`) on the 7-segment digits by default (1 s update interval), shows TOTP on digits on S1 (or the standalone button from `drivers/button.js`) for `TOTP_SHOW_DURATION_MS` then resumes the clock, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, stops any playing sound on S8, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S3 (`onS3Press`), and independently runs a keepalive timer (`AUDIO_TICK_ENABLED`/`AUDIO_TICK_INTERVAL_MS`, default on/60s) that plays `sounds/tick.mp3` via `drivers/audio.js`'s `playFile()` whenever nothing else is playing, regardless of TM1638 hardware presence |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
 | `sounds/` | `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 random-sound buttons, plus a `tick.mp3` used by the keepalive timer. Gitignored (per-machine content) but not excluded from `deploy.js`, so it deploys normally |
 | `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`/`ambientState`, written on every `/api/display` or `/api/ambient` start/stop and reloaded on boot so the matrix resumes its last text or ambient animation after a restart. Gitignored and excluded from `deploy.js` — pushing the dev machine's copy would clobber the Pi's actual state |
@@ -105,6 +107,11 @@ Runs on `:3000`. No test suite or linter is configured in this project.
   mpg123`); if missing, S4/S5/S6 just log a stub line instead of playing anything.
 - S7's switch is flaky (previously tested as hardware-faulty, which is why its sound-button role
   was reassigned to S5) — try a different press angle if its restart handler doesn't fire.
+- `drivers/button.js`'s button is wired **normally-closed** (connected at rest, open on press) —
+  the opposite polarity of a typical push-button. With the internal pull-up, that means the pin
+  reads *low* at rest and a press is a *rising* edge (`rpio.POLL_HIGH`), not the falling edge a
+  normally-open/pull-up button would produce. Wiring a normally-open button to this driver as-is
+  would make it register a "press" whenever the button is released, not pressed.
 - `keypad.js`'s S7 handler runs `sudo systemctl restart rpi-dashboard` via `execFile`, with no
   password piped in (unlike `deploy.js`'s SSH-based restart) — it relies on a NOPASSWD sudoers
   rule scoped to that exact command (see README's "Auto-start with systemd"). Without that rule,
