@@ -10,10 +10,7 @@ Local Node.js web dashboard for Raspberry Pi with:
   press S4, S5, or S6 to play a random sound from `sounds/S4/`, `sounds/S5/`,
   or `sounds/S6/` respectively, press S8 to stop any sound that's playing,
   press S7 to restart the rpi-dashboard service (display/show
-  durations are tunable via `.env`). Independently of any button, a keepalive
-  timer plays `sounds/tick.mp3` once a minute (as long as nothing else is
-  playing) to keep a paired Bluetooth speaker from sleeping — toggle via
-  `AUDIO_TICK_ENABLED`/`AUDIO_TICK_INTERVAL_MS` in `.env`
+  durations are tunable via `.env`)
 
 ---
 
@@ -307,10 +304,10 @@ graph TD
 | `drivers/ambient.js` | Generative ambient animations (wave, plasma) — renders via `drivers/display.js`'s SPI frame primitives |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
-| `drivers/audio.js` | `mpg123`-based random sound playback for the S4/S5/S6 buttons, `playFile()` for the keepalive tick, plus `stop()` for the S8 button |
-| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S8 button → stop sound playback; S7 button → service restart (S2/S3 overlays handled in `server.js`); independently, a keepalive timer plays `sounds/tick.mp3` once a minute whenever nothing else is playing |
+| `drivers/audio.js` | `mpg123`-based random sound playback for the S4/S5/S6 buttons, plus `stop()` for the S8 button |
+| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S8 button → stop sound playback; S7 button → service restart (S2/S3 overlays handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
-| `sounds/` | Gitignored folder with `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 buttons — create per step 5 above — plus a `tick.mp3` for the keepalive timer |
+| `sounds/` | Gitignored folder with `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 buttons — create per step 5 above |
 
 ---
 
@@ -323,10 +320,7 @@ the same pattern for its GPIO pin. `drivers/ambient.js` reuses `drivers/display.
 detection (it renders through `display.js`'s frame-push primitives rather than
 opening its own SPI handle), so ambient animations get the same stub-mode
 fallback automatically. `drivers/audio.js` follows the same pattern for a missing
-`mpg123` binary. Note the keepalive tick keeps running in this stub mode too
-(it's independent of the TM1638), so a dev machine without `mpg123` will log a
-`[Audio stub] would play: .../tick.mp3` line once a minute — set
-`AUDIO_TICK_ENABLED=false` in `.env` if that's noisy.
+`mpg123` binary.
 
 ---
 

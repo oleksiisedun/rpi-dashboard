@@ -59,11 +59,6 @@ module.exports = {
     PIN: requirePin("TOTP_BUTTON_PIN"),
   },
 
-  audio: {
-    TICK_ENABLED: process.env.AUDIO_TICK_ENABLED !== "false",
-    TICK_INTERVAL_MS: Number(process.env.AUDIO_TICK_INTERVAL_MS) || 60000,
-  },
-
   deploy: {
     DEFAULT_REMOTE_PATH: process.env.PI_PATH || "/home/pi/rpi-dashboard",
     EXCLUDED: ["node_modules", ".git", ".env.deploy", "tools", ".display-state.json", "Archive"],

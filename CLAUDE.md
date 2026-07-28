@@ -11,9 +11,7 @@ whose S3 button shows the current Wi-Fi network's password on the MAX7219,
 whose S4, S5, and S6 buttons each play a random sound from their own
 folder (`sounds/S4/`, `sounds/S5/`, and `sounds/S6/`, via `mpg123`), whose S8 button stops
 any sound currently playing, and whose S7 button restarts
-the `rpi-dashboard` systemd service (all show/display durations are tunable via `.env`). Independently of button presses, a keepalive timer plays `sounds/tick.mp3` every
-`AUDIO_TICK_INTERVAL_MS` (default 60s, on by default — disable via `AUDIO_TICK_ENABLED=false`) as
-long as nothing else is playing, to keep a paired Bluetooth speaker from sleeping. Every subsystem is designed to run identically whether or not the
+the `rpi-dashboard` systemd service (all show/display durations are tunable via `.env`). Every subsystem is designed to run identically whether or not the
 physical hardware is attached — see "Hardware-detection pattern" below. Hardware wiring and Pi
 setup steps live in `README.md`; this file is about the code.
 
@@ -21,7 +19,7 @@ setup steps live in `README.md`; this file is about the code.
 
 | File | Responsibility |
 |---|---|
-| `config.js` | Single place for tunable values (durations, intervals, default display/ambient settings, GPIO pins, ports, secret defaults, audio-tick toggle/interval, deploy path/exclusions) used by `server.js`/`display.js`/`ambient.js`/`keypad.js`/`deploy.js`. All tunable values read from `.env` via `process.env` with sensible defaults; pin values use `requirePin()` which logs an error (rather than silently using a wrong default) if the env var is missing. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
+| `config.js` | Single place for tunable values (durations, intervals, default display/ambient settings, GPIO pins, ports, secret defaults, deploy path/exclusions) used by `server.js`/`display.js`/`ambient.js`/`keypad.js`/`deploy.js`. All tunable values read from `.env` via `process.env` with sensible defaults; pin values use `requirePin()` which logs an error (rather than silently using a wrong default) if the env var is missing. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
 | `.env` | App config — display settings, GPIO pins, timing durations, `TOTP_SECRET`. Gitignored (per-machine values) but **deployed** to the Pi by `deploy.js` so both machines have their own copy. Copy from `.env.example` to get started |
 | `.env.deploy` | Deploy credentials — `PI_HOST`, `PI_USER`, `PI_PASSWORD`, `PI_PATH`. Dev-only; gitignored and excluded from `deploy.js` so it never reaches the Pi. Copy from `.env.deploy.example` |
 | `server.js` | Loads `.env` into `process.env` via `require("dotenv").config()` as its first line (so `config.js`'s reads are populated regardless of how the process was started — systemd unit, `npm start`, or a bare shell), then the Express app, all HTTP routes, in-memory `displayState`/`displaySettings`/`ambientState` (persisted to `.display-state.json` and restored on boot — ambient wins if both were somehow active), SIGINT/SIGTERM cleanup |
@@ -29,11 +27,11 @@ setup steps live in `README.md`; this file is about the code.
 | `drivers/ambient.js` | Generative ambient animations for the MAX7219 — `wave`/`plasma`, each an `init()`/`tick(state, t)` pair producing a 32-byte column-frame + brightness value. Runs its own recursive-`setTimeout` loop (same shape as `display.js`'s scroll loop) at `config.ambient.TICK_MS`, rendering via `drivers/display.js`'s exported primitives. Mutually exclusive with `startScroll` — enforced by `server.js`, not by this module |
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js`; its `CUSTOM` export is also read directly by `server.js` for the `/api/custom-symbols` route |
 | `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
-| `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3`, `playFile(filePath)` plays one specific file only if nothing's already playing (silent no-op otherwise — no queue/interrupt), `stop()` kills whatever is currently playing/queued |
+| `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3`, `stop()` kills whatever is currently playing/queued |
 | `drivers/button.js` | Standalone normally-closed GPIO push-button, independent of the TM1638 — opens its pin (`config.button.PIN`) with an internal pull-up and `rpio.poll()`s for the rising edge (press = circuit opens = pin goes high), debouncing in software. Exports `{ available, onPress(handler), stop() }`; `keypad.js` registers `handleS1Press` as its press handler so the button mimics S1 |
-| `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows current time/date (`HH.MMDD.MM`) on the 7-segment digits by default (1 s update interval), shows TOTP on digits on S1 (or the standalone button from `drivers/button.js`) for `TOTP_SHOW_DURATION_MS` then resumes the clock, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, stops any playing sound on S8, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, fires registered callbacks on S2 (`onS2Press`) and S3 (`onS3Press`), and independently runs a keepalive timer (`AUDIO_TICK_ENABLED`/`AUDIO_TICK_INTERVAL_MS`, default on/60s) that plays `sounds/tick.mp3` via `drivers/audio.js`'s `playFile()` whenever nothing else is playing, regardless of TM1638 hardware presence |
+| `keypad.js` | Owns the `TM1638` instance, polls buttons at `config.js`'s `POLL_INTERVAL_MS`, debounces button edges, shows current time/date (`HH.MMDD.MM`) on the 7-segment digits by default (1 s update interval), shows TOTP on digits on S1 (or the standalone button from `drivers/button.js`) for `TOTP_SHOW_DURATION_MS` then resumes the clock, plays a random sound from `sounds/S4/` on S4, `sounds/S5/` on S5, and `sounds/S6/` on S6, stops any playing sound on S8, restarts the `rpi-dashboard` service via `sudo systemctl restart` on S7, and fires registered callbacks on S2 (`onS2Press`) and S3 (`onS3Press`) |
 | `totp.js` | `generateTOTP(secret)` — shared `oathtool` wrapper used by both `server.js` and `keypad.js` |
-| `sounds/` | `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 random-sound buttons, plus a `tick.mp3` used by the keepalive timer. Gitignored (per-machine content) but not excluded from `deploy.js`, so it deploys normally |
+| `sounds/` | `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 random-sound buttons. Gitignored (per-machine content) but not excluded from `deploy.js`, so it deploys normally |
 | `.display-state.json` | Runtime snapshot of `displayState`/`displaySettings`/`ambientState`, written on every `/api/display` or `/api/ambient` start/stop and reloaded on boot so the matrix resumes its last text or ambient animation after a restart. Gitignored and excluded from `deploy.js` — pushing the dev machine's copy would clobber the Pi's actual state |
 | `public/index.html` | Single-page vanilla JS/CSS frontend, no build step |
 | `deploy.js` | Deployment script — reads Pi credentials from `.env.deploy`, pushes local code (including `.env`) to the Pi over SSH, and restarts the systemd service |
@@ -134,12 +132,6 @@ Runs on `:3000`. No test suite or linter is configured in this project.
   `loginctl enable-linger pi` (see README's "Auto-start with systemd"), or `mpg123` exits 0
   with no error and plays silence — it works fine when run by hand over SSH, which is what
   makes this confusing to debug.
-- The keepalive tick (`keypad.js`'s `startTick()`) runs unconditionally — even with no TM1638
-  attached (stub mode) — since it exists for the Bluetooth speaker, not the keypad. In stub/no-
-  `mpg123` mode this means a `[Audio stub] would play: .../tick.mp3` line logs every
-  `AUDIO_TICK_INTERVAL_MS` on a dev machine; set `AUDIO_TICK_ENABLED=false` locally if that's
-  noisy. It also shares `drivers/audio.js`'s single `currentPlayer` slot with S4/S5/S6 — a tick
-  during real sound playback is silently dropped, by design, not a bug.
 - Ambient mode and scrolling text are mutually exclusive on the MAX7219 and the exclusion is
   enforced entirely in `server.js` (each route stops the other mode before persisting/starting)
   — `drivers/display.js` and `drivers/ambient.js` don't know about each other. `showOverlay()`
