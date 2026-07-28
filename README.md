@@ -5,7 +5,7 @@ Local Node.js web dashboard for Raspberry Pi with:
   button, or a standalone GPIO push-button wired independently of the TM1638)
 - **MAX7219 4×8×8 LED matrix** — scrolling text in Latin + Ukrainian Cyrillic
 - **TM1638 LED&KEY module** — press S1 to show the TOTP code on the 7-segment
-  digits, press S2 to scroll this machine's LAN IP and port on the MAX7219,
+  digits and play a random sound from `sounds/TOTP/`, press S2 to scroll this machine's LAN IP and port on the MAX7219,
   press S3 to scroll the current Wi-Fi network's password on the MAX7219,
   press S4, S5, or S6 to play a random sound from `sounds/S4/`, `sounds/S5/`,
   or `sounds/S6/` respectively, press S8 to stop any sound that's playing,
@@ -43,7 +43,7 @@ These pins don't conflict with the MAX7219's SPI0 pins.
 ### Standalone TOTP push-button
 
 An independent button (not part of the TM1638) that also shows the TOTP code
-on the 7-segment digits, wired **normally-closed** — its two leads are
+on the 7-segment digits and plays a random sound from `sounds/TOTP/`, wired **normally-closed** — its two leads are
 connected at rest, and pressing it *breaks* the connection. This is the
 opposite polarity of a typical push-button, so don't wire it like a
 normally-open one.
@@ -96,7 +96,8 @@ npm install
 ### 5. Run
 
 ```bash
-mkdir -p sounds/S4 sounds/S5 sounds/S6   # gitignored — add your own .mp3 files to each
+mkdir -p sounds/TOTP sounds/S4 sounds/S5 sounds/S6   # gitignored — add your own .mp3 files to each
+cp /path/to/your/totp-sounds/*.mp3 sounds/TOTP/
 cp /path/to/your/s4-sounds/*.mp3 sounds/S4/
 cp /path/to/your/s5-sounds/*.mp3 sounds/S5/
 cp /path/to/your/s6-sounds/*.mp3 sounds/S6/
@@ -113,7 +114,9 @@ Keypad:  ✅ TM1638 ready — press S1 to show TOTP
 ```
 
 Press **S1** on the TM1638 board — the TOTP code appears on the 7-segment
-digits, then clears automatically after `.env`'s `TOTP_SHOW_DURATION_MS`.
+digits while a random `.mp3` from `sounds/TOTP/` plays via `mpg123 -o pulse`
+(same playback path as S4/S5/S6, see below), then the digits clear
+automatically after `.env`'s `TOTP_SHOW_DURATION_MS`.
 
 Press **S2** — this machine's LAN IP and port (e.g. `192.168.0.141:3000`)
 scrolls on the MAX7219 (using whatever speed/brightness/rotate/direction is
@@ -129,7 +132,8 @@ rule (see "Auto-start with systemd" below) — without it, the service can
 still read the SSID but gets an empty password.
 
 Press **S4**, **S5**, or **S6** — a random `.mp3` from `sounds/S4/`, `sounds/S5/`, or
-`sounds/S6/` (respectively) plays via `mpg123 -o pulse`, which routes through
+`sounds/S6/` (respectively) plays via `mpg123 -o pulse`, the same playback path
+used by S1's TOTP sound, which routes through
 PipeWire/PulseAudio so it reaches whatever output is set as your default sink
 (3.5mm jack, HDMI, USB, or a paired Bluetooth speaker). That means the
 systemd service needs access to your user's PipeWire/Pulse session — see the
@@ -304,10 +308,10 @@ graph TD
 | `drivers/ambient.js` | Generative ambient animations (wave, plasma) — renders via `drivers/display.js`'s SPI frame primitives |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
-| `drivers/audio.js` | `mpg123`-based random sound playback for the S4/S5/S6 buttons, plus `stop()` for the S8 button |
-| `keypad.js` | S1 button → TOTP-on-digits behavior; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S8 button → stop sound playback; S7 button → service restart (S2/S3 overlays handled in `server.js`) |
+| `drivers/audio.js` | `mpg123`-based random sound playback for the S1/S4/S5/S6 buttons, plus `stop()` for the S8 button |
+| `keypad.js` | S1 button → TOTP-on-digits behavior plus a random TOTP sound; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S8 button → stop sound playback; S7 button → service restart (S2/S3 overlays handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
-| `sounds/` | Gitignored folder with `S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S4/S5/S6 buttons — create per step 5 above |
+| `sounds/` | Gitignored folder with `TOTP/`/`S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S1/S4/S5/S6 buttons — create per step 5 above |
 
 ---
 

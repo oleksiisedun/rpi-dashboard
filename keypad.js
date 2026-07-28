@@ -6,7 +6,8 @@
  * Behavior: the 8 seven-segment digits show the current time and date
  * (HH.MM DD.MM) by default, updating every second. Pressing S1 (or the
  * standalone GPIO button wired via drivers/button.js) generates a fresh
- * TOTP code and shows it for 15 seconds, then the clock resumes.
+ * TOTP code, shows it for 15 seconds while playing a random sound from
+ * sounds/TOTP/, then the clock resumes.
  * Pressing S4, S5, or S6 plays a random sound from its own folder
  * (sounds/S4/, sounds/S5/, sounds/S6/ respectively). Pressing S8 stops
  * any sound currently playing.
@@ -32,6 +33,7 @@ const TOTP_SECRET = config.server.TOTP_SECRET;
 const SHOW_DURATION_MS = config.keypad.TOTP_SHOW_DURATION_MS;
 const POLL_INTERVAL_MS = config.keypad.POLL_INTERVAL_MS; // ~16 Hz — plenty fast for a human button press
 const SOUND_DIRS = {
+  TOTP: path.join(__dirname, "sounds", "TOTP"),
   S4: path.join(__dirname, "sounds", "S4"),
   S5: path.join(__dirname, "sounds", "S5"),
   S6: path.join(__dirname, "sounds", "S6"),
@@ -159,6 +161,7 @@ async function handleS1Press() {
   try {
     const code = await generateTOTP(TOTP_SECRET);
     showOnDigits(code);
+    audio.playRandom(SOUND_DIRS.TOTP);
     scheduleClockResume(SHOW_DURATION_MS);
   } catch (e) {
     console.error("[Keypad] TOTP error:", e.message);
