@@ -9,8 +9,9 @@
  * TOTP code, shows it for 15 seconds while playing a random sound from
  * sounds/TOTP/, then the clock resumes.
  * Pressing S4, S5, or S6 plays a random sound from its own folder
- * (sounds/S4/, sounds/S5/, sounds/S6/ respectively). Pressing S8 stops
- * any sound currently playing.
+ * (sounds/S4/, sounds/S5/, sounds/S6/ respectively). Pressing S8 invokes
+ * a caller-supplied handler (see onS8Press) — used by server.js to toggle
+ * ambient mode on/off.
  * Pressing S7 restarts the rpi-dashboard systemd service. S7's switch
  * previously tested as hardware-faulty (see README's sudoers setup step for
  * why this needs a NOPASSWD rule) — wired anyway in case that's since
@@ -182,17 +183,6 @@ function handleSoundPress(button) {
   audio.playRandom(SOUND_DIRS[button]);
 }
 
-// ── S8 press → stop any playing sound ──────────────────────────────────────
-
-/**
- * Stop any currently playing sound.
- * @returns {void}
- */
-function handleS8Press() {
-  console.log("[Keypad] S8 pressed — stopping sound");
-  audio.stop();
-}
-
 // ── S7 press → restart the rpi-dashboard service ───────────────────────────
 
 /**
@@ -232,6 +222,19 @@ let s3Handler = null;
  */
 function onS3Press(handler) {
   s3Handler = handler;
+}
+
+// ── S8 press → caller-supplied handler ───────────────────────────────────────
+
+let s8Handler = null;
+
+/**
+ * Register a handler to invoke once per physical S8 press (rising edge).
+ * @param {() => void} handler
+ * @returns {void}
+ */
+function onS8Press(handler) {
+  s8Handler = handler;
 }
 
 // ── Button polling with edge detection (fires once per physical press) ────
@@ -276,7 +279,7 @@ function poll() {
   if (justPressed & 0x10) handleSoundPress('S5'); // bit4 = S5
   if (justPressed & 0x20) handleSoundPress('S6'); // bit5 = S6
   if (justPressed & 0x40) handleS7Press();         // bit6 = S7
-  if (justPressed & 0x80) handleS8Press();         // bit7 = S8
+  if (justPressed & 0x80) s8Handler && s8Handler(); // bit7 = S8
 
   lastButtons = buttons;
 }
@@ -306,4 +309,4 @@ start();
 if (available) startClock();
 button.onPress(handleS1Press);
 
-module.exports = { available, stop, onS2Press, onS3Press };
+module.exports = { available, stop, onS2Press, onS3Press, onS8Press };

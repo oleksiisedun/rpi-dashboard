@@ -415,6 +415,34 @@ function handleS3Press() {
 
 keypad.onS3Press(handleS3Press);
 
+// ─── S8 button → toggle ambient mode on/off ────────────────────────────────────
+
+/**
+ * Toggle ambient mode: stop it if currently active, otherwise start it (reusing
+ * the last-used animation/brightness) and stop any scrolling text, mirroring the
+ * mutual-exclusion handling in the /api/ambient/start route.
+ * @returns {void}
+ */
+function handleS8Press() {
+  cancelOverlayRevert();
+
+  if (ambientState.active) {
+    console.log("[Ambient] S8 pressed — stopping ambient mode");
+    ambient.stop();
+    ambientState = { ...ambientState, active: false, startedAt: null };
+  } else {
+    console.log(`[Ambient] S8 pressed — starting ambient mode: ${ambientState.animation}`);
+    display.stop();
+    displayState = { active: false, text: "", startedAt: null };
+    ambientState = { ...ambientState, active: true, startedAt: new Date().toISOString() };
+    ambient.start(ambientState.animation, { brightness: ambientState.brightness });
+  }
+
+  saveDisplayState(displayState, displaySettings, ambientState);
+}
+
+keypad.onS8Press(handleS8Press);
+
 // ─── Restore display state from before the last restart ───────────────────────
 
 // A persisted animation name can go stale across a deploy that renames/removes

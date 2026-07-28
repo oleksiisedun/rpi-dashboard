@@ -8,7 +8,7 @@ Local Node.js web dashboard for Raspberry Pi with:
   digits and play a random sound from `sounds/TOTP/`, press S2 to scroll this machine's LAN IP and port on the MAX7219,
   press S3 to scroll the current Wi-Fi network's password on the MAX7219,
   press S4, S5, or S6 to play a random sound from `sounds/S4/`, `sounds/S5/`,
-  or `sounds/S6/` respectively, press S8 to stop any sound that's playing,
+  or `sounds/S6/` respectively, press S8 to toggle ambient mode on/off,
   press S7 to restart the rpi-dashboard service (display/show
   durations are tunable via `.env`)
 
@@ -150,9 +150,12 @@ with no interactive stdin. This requires a NOPASSWD sudoers rule (see
 "Auto-start with systemd" below) — without it, the restart silently fails and
 an error is logged. S7's switch is flaky — try a different press angle.
 
-Press **S8** — immediately stops whatever sound is currently playing (or
-queued) from an S4/S5/S6 press, by killing the `mpg123` process. Unlike S3/S7
-this is a plain in-process kill, so no sudoers rule is needed.
+Press **S8** — toggles ambient mode on the MAX7219 on/off: if ambient mode is
+running it stops it, otherwise it starts it (reusing whichever animation and
+brightness were last active/configured) and stops any scrolling text first,
+the same mutual-exclusion behavior as the `/api/ambient/start` web UI route.
+Handled entirely in `server.js` (not `drivers/audio.js`), so no sudoers rule
+is needed.
 
 ---
 
@@ -308,8 +311,8 @@ graph TD
 | `drivers/ambient.js` | Generative ambient animations (wave, plasma) — renders via `drivers/display.js`'s SPI frame primitives |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
-| `drivers/audio.js` | `mpg123`-based random sound playback for the S1/S4/S5/S6 buttons, plus `stop()` for the S8 button |
-| `keypad.js` | S1 button → TOTP-on-digits behavior plus a random TOTP sound; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S8 button → stop sound playback; S7 button → service restart (S2/S3 overlays handled in `server.js`) |
+| `drivers/audio.js` | `mpg123`-based random sound playback for the S1/S4/S5/S6 buttons, plus `stop()` for stopping playback |
+| `keypad.js` | S1 button → TOTP-on-digits behavior plus a random TOTP sound; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S8 button → ambient mode toggle; S7 button → service restart (S2/S3 overlays and the S8 ambient toggle are handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
 | `sounds/` | Gitignored folder with `TOTP/`/`S4/`/`S5/`/`S6/` subfolders of `.mp3` files for the S1/S4/S5/S6 buttons — create per step 5 above |
 
