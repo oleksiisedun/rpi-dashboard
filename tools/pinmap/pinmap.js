@@ -61,6 +61,9 @@ function buildUsedPins() {
   if (clk) used[clk] = 'TM1638';
   if (dio) used[dio] = 'TM1638';
 
+  const totpButton = Number(process.env.TOTP_BUTTON_PIN);
+  if (totpButton) used[totpButton] = 'TOTP_BUTTON';
+
   // MAX7219 uses SPI0 MOSI (pin 19) + SCLK (pin 23) + CE based on DISPLAY_SPI_DEVICE
   const spiDevice = Number(process.env.DISPLAY_SPI_DEVICE ?? 0);
   used[19] = 'MAX7219';

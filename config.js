@@ -55,6 +55,10 @@ module.exports = {
     POLL_INTERVAL_MS: Number(process.env.POLL_INTERVAL_MS) || 60,
   },
 
+  button: {
+    PIN: requirePin("TOTP_BUTTON_PIN"),
+  },
+
   audio: {
     TICK_ENABLED: process.env.AUDIO_TICK_ENABLED !== "false",
     TICK_INTERVAL_MS: Number(process.env.AUDIO_TICK_INTERVAL_MS) || 60000,

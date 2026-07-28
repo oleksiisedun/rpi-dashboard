@@ -4,8 +4,9 @@
  * keypad.js — TM1638 LED&KEY integration.
  *
  * Behavior: the 8 seven-segment digits show the current time and date
- * (HH.MM DD.MM) by default, updating every second. Pressing S1 generates a
- * fresh TOTP code and shows it for 15 seconds, then the clock resumes.
+ * (HH.MM DD.MM) by default, updating every second. Pressing S1 (or the
+ * standalone GPIO button wired via drivers/button.js) generates a fresh
+ * TOTP code and shows it for 15 seconds, then the clock resumes.
  * Pressing S4, S5, or S6 plays a random sound from its own folder
  * (sounds/S4/, sounds/S5/, sounds/S6/ respectively). Pressing S8 stops
  * any sound currently playing.
@@ -30,6 +31,7 @@ const path = require("path");
 const { execFile } = require("child_process");
 const { generateTOTP } = require("./totp");
 const audio = require("./drivers/audio");
+const button = require("./drivers/button");
 const config = require("./config");
 
 const TOTP_SECRET = config.server.TOTP_SECRET;
@@ -325,11 +327,13 @@ function stop() {
   if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
   if (clearTimer)    { clearTimeout(clearTimer);     clearTimer    = null; }
   if (tickInterval)  { clearInterval(tickInterval);  tickInterval  = null; }
+  button.stop();
   clearDigits();
 }
 
 start();
 if (available) startClock();
 startTick();
+button.onPress(handleS1Press);
 
 module.exports = { available, stop, onS2Press, onS3Press };
