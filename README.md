@@ -11,6 +11,9 @@ Local Node.js web dashboard for Raspberry Pi with:
   or `sounds/S6/` respectively, press S8 to toggle ambient mode on/off,
   press S7 to restart the rpi-dashboard service (display/show
   durations are tunable via `.env`)
+- **Network-offline detection** — the MAX7219 automatically shows a scrolling
+  error message whenever the Pi has no LAN connection or can't reach the
+  internet, resuming whatever it showed before once connectivity returns
 
 ---
 
@@ -157,6 +160,16 @@ the same mutual-exclusion behavior as the `/api/ambient/start` web UI route.
 Handled entirely in `server.js` (not `drivers/audio.js`), so no sudoers rule
 is needed.
 
+**No network?** — `server.js` checks connectivity every `.env`'s
+`NETWORK_CHECK_INTERVAL_MS` (default 30s): if there's no LAN IP, or a LAN IP
+is present but `NETWORK_PROBE_HOST:NETWORK_PROBE_PORT` (default
+`1.1.1.1:443`) isn't reachable within `NETWORK_PROBE_TIMEOUT_MS`, the MAX7219
+switches to a scrolling `NETWORK_ERROR_MESSAGE` (default `NO NETWORK
+CONNECTION`) until connectivity comes back, then automatically resumes
+whatever was showing before (scrolling text or an ambient animation, with
+its original settings). No setup needed — this runs unconditionally,
+independent of the keypad.
+
 ---
 
 ## Auto-start with systemd
@@ -273,7 +286,7 @@ runs `npm install --production` there, and restarts the `rpi-dashboard` systemd 
 
 ## Architecture
 
-`server.js` is the central hub: it exposes the HTTP API consumed by the browser frontend and registers S2/S3 overlay callbacks on `keypad.js`. `keypad.js` runs its own polling loop against `drivers/tm1638.js` and dispatches button presses to `totp.js`, `drivers/audio.js`, or back to `server.js` via those callbacks. Both `server.js` and `keypad.js` share the `totp.js` `oathtool` wrapper; `server.js` drives `drivers/display.js`, which reads glyph bitmaps from `drivers/font.js` before writing scroll frames over SPI. `server.js` also drives `drivers/ambient.js` for generative ambient animations, which shares the same SPI frame-push primitives from `drivers/display.js` rather than talking to the hardware directly — the two are mutually exclusive, and `server.js` enforces that by stopping one before starting the other. All tunable values are read from `.env` via `config.js`.
+`server.js` is the central hub: it exposes the HTTP API consumed by the browser frontend and registers S2/S3 overlay callbacks on `keypad.js`. `keypad.js` runs its own polling loop against `drivers/tm1638.js` and dispatches button presses to `totp.js`, `drivers/audio.js`, or back to `server.js` via those callbacks. Both `server.js` and `keypad.js` share the `totp.js` `oathtool` wrapper; `server.js` drives `drivers/display.js`, which reads glyph bitmaps from `drivers/font.js` before writing scroll frames over SPI. `server.js` also drives `drivers/ambient.js` for generative ambient animations, which shares the same SPI frame-push primitives from `drivers/display.js` rather than talking to the hardware directly — the two are mutually exclusive, and `server.js` enforces that by stopping one before starting the other. `server.js` also runs its own periodic connectivity check (Node's built-in `net` module, no driver involved) that takes over `drivers/display.js` with an error message while offline. All tunable values are read from `.env` via `config.js`.
 
 ```mermaid
 graph TD
@@ -306,7 +319,7 @@ graph TD
 
 | File | Purpose |
 |---|---|
-| `server.js` | Express app, HTTP routes |
+| `server.js` | Express app, HTTP routes, and a periodic connectivity check that shows a matrix error while offline |
 | `drivers/display.js` | MAX7219 driver (SPI, scrolling) |
 | `drivers/ambient.js` | Generative ambient animations (wave, plasma) — renders via `drivers/display.js`'s SPI frame primitives |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |

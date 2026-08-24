@@ -12,7 +12,11 @@ whose S3 button shows the current Wi-Fi network's password on the MAX7219,
 whose S4, S5, and S6 buttons each play a random sound from their own
 folder (`sounds/S4/`, `sounds/S5/`, and `sounds/S6/`, via `mpg123`), whose S8 button toggles
 ambient mode on/off, and whose S7 button restarts
-the `rpi-dashboard` systemd service (all show/display durations are tunable via `.env`). Every subsystem is designed to run identically whether or not the
+the `rpi-dashboard` systemd service (all show/display durations are tunable via `.env`).
+`server.js` also runs a periodic connectivity monitor that takes over the MAX7219 with a
+scrolling error message whenever the Pi has no LAN IP or can't reach the internet, automatically
+resuming whatever was showing (scroll text or an ambient animation) once connectivity returns.
+Every subsystem is designed to run identically whether or not the
 physical hardware is attached — see "Hardware-detection pattern" below. Hardware wiring and Pi
 setup steps live in `README.md`; this file is about the code.
 
@@ -20,10 +24,10 @@ setup steps live in `README.md`; this file is about the code.
 
 | File | Responsibility |
 |---|---|
-| `config.js` | Single place for tunable values (durations, intervals, default display/ambient settings, GPIO pins, ports, secret defaults, deploy path/exclusions) used by `server.js`/`display.js`/`ambient.js`/`keypad.js`/`deploy.js`. All tunable values read from `.env` via `process.env` with sensible defaults; pin values use `requirePin()` which logs an error (rather than silently using a wrong default) if the env var is missing. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
-| `.env` | App config — display settings, GPIO pins, timing durations, `TOTP_SECRET`. Gitignored (per-machine values) but **deployed** to the Pi by `deploy.js` so both machines have their own copy. Copy from `.env.example` to get started |
+| `config.js` | Single place for tunable values (durations, intervals, default display/ambient settings, connectivity-probe settings, GPIO pins, ports, secret defaults, deploy path/exclusions) used by `server.js`/`display.js`/`ambient.js`/`keypad.js`/`deploy.js`. All tunable values read from `.env` via `process.env` with sensible defaults; pin values use `requirePin()` which logs an error (rather than silently using a wrong default) if the env var is missing. Hardware protocol constants (register addresses, command bytes) stay local to their driver files instead |
+| `.env` | App config — display settings, GPIO pins, timing durations, connectivity-probe settings, `TOTP_SECRET`. Gitignored (per-machine values) but **deployed** to the Pi by `deploy.js` so both machines have their own copy. Copy from `.env.example` to get started |
 | `.env.deploy` | Deploy credentials — `PI_HOST`, `PI_USER`, `PI_PASSWORD`, `PI_PATH`. Dev-only; gitignored and excluded from `deploy.js` so it never reaches the Pi. Copy from `.env.deploy.example` |
-| `server.js` | Loads `.env` into `process.env` via `require("dotenv").config()` as its first line (so `config.js`'s reads are populated regardless of how the process was started — systemd unit, `npm start`, or a bare shell), then the Express app, all HTTP routes, in-memory `displayState`/`displaySettings`/`ambientState` (persisted to `.display-state.json` and restored on boot — ambient wins if both were somehow active), SIGINT/SIGTERM cleanup |
+| `server.js` | Loads `.env` into `process.env` via `require("dotenv").config()` as its first line (so `config.js`'s reads are populated regardless of how the process was started — systemd unit, `npm start`, or a bare shell), then the Express app, all HTTP routes, in-memory `displayState`/`displaySettings`/`ambientState` (persisted to `.display-state.json` and restored on boot — ambient wins if both were somehow active), a periodic network-connectivity monitor that takes over the MAX7219 with an error message while offline (see "Known constraints" below), SIGINT/SIGTERM cleanup |
 | `drivers/display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop. Exports `pushFrame`/`setBrightness`/`clearHardware` (aliases of its private `_pushFrame`/`_setBrightness`/`_clearHardware`) so `drivers/ambient.js` can render through the same SPI primitives without opening its own hardware handle |
 | `drivers/ambient.js` | Generative ambient animations for the MAX7219 — `wave`/`plasma`, each an `init()`/`tick(state, t)` pair producing a 32-byte column-frame + brightness value. Runs its own recursive-`setTimeout` loop (same shape as `display.js`'s scroll loop) at `config.ambient.TICK_MS`, rendering via `drivers/display.js`'s exported primitives. Mutually exclusive with `startScroll` — enforced by `server.js`, not by this module |
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js`; its `CUSTOM` export is also read directly by `server.js` for the `/api/custom-symbols` route |
@@ -139,7 +143,27 @@ Runs on `:3000`. No test suite or linter is configured in this project.
   (S2/S3) snapshots whichever mode was active — including the ambient animation/brightness, not
   just scrolling text — before showing the overlay, and resumes that same mode once
   `OVERLAY_DURATION_MS` elapses, so an S2/S3 press only pauses ambient mode rather than
-  cancelling it.
+  cancelling it. This snapshot/restore logic is factored into `captureDisplaySnapshot()`/
+  `restoreDisplaySnapshot()`, shared with the network-error takeover described below.
+- `server.js`'s network monitor (`handleNetworkCheck()`, on a `setInterval` at
+  `config.network.CHECK_INTERVAL_MS`) treats the Pi as offline if `getLanIp()` returns `null`
+  **or** a raw TCP connect to `config.network.PROBE_HOST:PROBE_PORT` (default `1.1.1.1:443`, via
+  Node's built-in `net` module — chosen over shelling out to `ping` to avoid a subprocess-per-check
+  and `ping`'s `CAP_NET_RAW`/setuid fragility) fails/times out. On the offline transition it
+  snapshots whatever was showing (via `captureDisplaySnapshot()`), stops ambient if it was active,
+  and starts a persistent (non-timed) scroll of `config.network.ERROR_MESSAGE`; on the online
+  transition it restores that snapshot via `restoreDisplaySnapshot()`. It never mutates
+  `displayState`/`ambientState` to reflect the error text itself — same as the S2/S3 overlay's IP/
+  password text, it's transient matrix content, not a persisted mode, so `/api/display/status` and
+  `/api/ambient/status` keep reporting the pre-error state. `cancelNetworkError()` (called at the
+  top of every manual display/ambient action, mirroring `cancelOverlayRevert()`) lets a manual
+  action or the S2/S3 overlay take over immediately; because the two interruption mechanisms can
+  nest (an outage during an overlay, or an overlay press during an outage), each one hands its
+  pending snapshot to the other instead of re-deriving from live state when interrupted — otherwise
+  the live `ambientState.active` (already toggled off by whichever mechanism grabbed the matrix
+  first) would look like "nothing was running" and the true prior animation would be lost. No
+  consecutive-failure hysteresis — a single probe every `CHECK_INTERVAL_MS` already rides out
+  transient blips.
 - The MAX7219 has no per-pixel PWM — only on/off per pixel plus one global `INTENSITY` register
   (0-15). `drivers/ambient.js`'s animations (`wave`/`plasma`) render at a constant brightness and
   vary which pixels are lit instead; a brightness-based effect would need to modulate
