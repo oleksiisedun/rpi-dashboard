@@ -264,6 +264,14 @@ runs `npm install --production` there, and restarts the `rpi-dashboard` systemd 
 
 `.env.deploy` holds only deploy credentials and never reaches the Pi.
 
+Raspberry Pi OS runs `avahi-daemon` and broadcasts its hostname over mDNS by default, so
+`PI_HOST` can be set to `<hostname>.local` instead of a raw IP — this avoids breaking
+`deploy.js`/SSH access whenever DHCP hands out a new address. This Pi's hostname is
+`rpi-dashboard` (renamed from the default `pi` via `sudo raspi-config nonint do_hostname
+rpi-dashboard`, then `sudo systemctl restart avahi-daemon` to broadcast it immediately), so
+`PI_HOST=rpi-dashboard.local`. Works out of the box on macOS and on Linux distros with
+`nss-mdns` (Avahi) configured; on Windows, install Bonjour Print Services (or use WSL) first.
+
 ---
 
 ## API
