@@ -3,6 +3,7 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const net = require("net");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const config = require("./config");
@@ -148,6 +149,7 @@ app.post("/api/display", (req, res) => {
   }
 
   cancelOverlayRevert();
+  cancelNetworkError();
 
   // Mutual exclusion: scrolling text always wins over ambient mode.
   ambient.stop();
@@ -181,6 +183,7 @@ app.post("/api/display", (req, res) => {
 app.post("/api/display/stop", (req, res) => {
   console.log(`[Display] Stopping loop.`);
   cancelOverlayRevert();
+  cancelNetworkError();
   display.stop();
   displayState = { active: false, text: "", startedAt: null };
   saveDisplayState(displayState, displaySettings, ambientState);
@@ -224,6 +227,7 @@ app.post("/api/ambient/start", (req, res) => {
   }
 
   cancelOverlayRevert();
+  cancelNetworkError();
 
   // Mutual exclusion: ambient mode always wins over scrolling text.
   display.stop();
@@ -246,6 +250,7 @@ app.post("/api/ambient/start", (req, res) => {
  */
 app.post("/api/ambient/stop", (req, res) => {
   console.log(`[Ambient] Stopping animation.`);
+  cancelNetworkError();
   ambient.stop();
   ambientState = { ...ambientState, active: false, startedAt: null };
   saveDisplayState(displayState, displaySettings, ambientState);
@@ -280,24 +285,66 @@ function cancelOverlayRevert() {
 }
 
 /**
+ * Snapshot of displayState/ambientState, used to restore after a temporary
+ * interruption (an S2/S3 overlay or a network-error takeover).
+ * @returns {{displayActive: boolean, displayText: string, ambientActive: boolean, ambientAnimation: string, ambientBrightness: number}}
+ */
+function captureDisplaySnapshot() {
+  return {
+    displayActive: displayState.active,
+    displayText: displayState.text,
+    ambientActive: ambientState.active,
+    ambientAnimation: ambientState.animation,
+    ambientBrightness: ambientState.brightness,
+  };
+}
+
+/**
+ * Restore whichever mode a snapshot says was active — resume ambient (with its
+ * animation/brightness), resume scrolling text, or stop if neither was active.
+ * @param {ReturnType<typeof captureDisplaySnapshot>|null} snapshot
+ * @returns {void}
+ */
+function restoreDisplaySnapshot(snapshot) {
+  if (!snapshot) return display.stop();
+  if (snapshot.ambientActive) {
+    console.log(`[Ambient] Resuming ambient animation: ${snapshot.ambientAnimation}`);
+    // The interrupting scroll loop (display.js's own timer) is still running at
+    // this point — ambient.start() only clears ambient's timer, not display's,
+    // so it must be stopped explicitly or both loops render concurrently.
+    display.stop();
+    ambientState = {
+      active: true,
+      animation: snapshot.ambientAnimation,
+      brightness: snapshot.ambientBrightness,
+      startedAt: new Date().toISOString(),
+    };
+    saveDisplayState(displayState, displaySettings, ambientState);
+    ambient.start(snapshot.ambientAnimation, { brightness: snapshot.ambientBrightness });
+  } else if (snapshot.displayActive) {
+    display.startScroll(snapshot.displayText, displaySettings);
+  } else {
+    display.stop();
+  }
+}
+
+/**
  * Show text on the MAX7219 for OVERLAY_DURATION_MS, using the current web UI
- * matrix settings, then restore whatever was showing before — resuming ambient
- * mode (with its animation/brightness) if that's what was interrupted, resuming
- * scrolling text if that was active, or stopping if nothing was. Used by the S2
- * (LAN IP) and S3 (Wi-Fi password) overlays.
+ * matrix settings, then restore whatever was showing before via
+ * restoreDisplaySnapshot(). Used by the S2 (LAN IP) and S3 (Wi-Fi password)
+ * overlays.
  * @param {string} text
  * @returns {void}
  */
 function showOverlay(text) {
   if (!overlayRevertTimer) {
-    preOverlayState = {
-      displayActive: displayState.active,
-      displayText: displayState.text,
-      ambientActive: ambientState.active,
-      ambientAnimation: ambientState.animation,
-      ambientBrightness: ambientState.brightness,
-    };
+    // If a network error is currently showing, its snapshot holds the TRUE
+    // pre-interruption state — live displayState/ambientState were already
+    // mutated (ambient stopped) when the error took over, so capturing live
+    // state here would silently lose "ambient was running" information.
+    preOverlayState = networkErrorActive ? preNetworkErrorState : captureDisplaySnapshot();
   }
+  cancelNetworkError();
 
   if (ambientState.active) {
     ambient.stop();
@@ -310,25 +357,7 @@ function showOverlay(text) {
   clearTimeout(overlayRevertTimer);
   overlayRevertTimer = setTimeout(() => {
     overlayRevertTimer = null;
-    if (preOverlayState.ambientActive) {
-      console.log(`[Ambient] Resuming ambient animation after overlay: ${preOverlayState.ambientAnimation}`);
-      // The overlay's scroll loop (display.js's own timer) is still running at
-      // this point — ambient.start() only clears ambient's timer, not display's,
-      // so it must be stopped explicitly or both loops render concurrently.
-      display.stop();
-      ambientState = {
-        active: true,
-        animation: preOverlayState.ambientAnimation,
-        brightness: preOverlayState.ambientBrightness,
-        startedAt: new Date().toISOString(),
-      };
-      saveDisplayState(displayState, displaySettings, ambientState);
-      ambient.start(preOverlayState.ambientAnimation, { brightness: preOverlayState.ambientBrightness });
-    } else if (preOverlayState.displayActive) {
-      display.startScroll(preOverlayState.displayText, displaySettings);
-    } else {
-      display.stop();
-    }
+    restoreDisplaySnapshot(preOverlayState);
     preOverlayState = null;
   }, OVERLAY_DURATION_MS);
 }
@@ -425,6 +454,7 @@ keypad.onS3Press(handleS3Press);
  */
 function handleS8Press() {
   cancelOverlayRevert();
+  cancelNetworkError();
 
   if (ambientState.active) {
     console.log("[Ambient] S8 pressed — stopping ambient mode");
@@ -442,6 +472,80 @@ function handleS8Press() {
 }
 
 keypad.onS8Press(handleS8Press);
+
+// ─── Network connectivity monitor → persistent matrix error until restored ────
+
+let networkErrorActive = false;   // true while the "no network" message owns the matrix
+let preNetworkErrorState = null;  // snapshot captured when connectivity was lost
+let networkCheckTimer = null;
+
+/**
+ * Hybrid connectivity check: no LAN IP → offline; LAN IP present but the probe
+ * host is unreachable → also offline. Single TCP attempt, no retry/hysteresis —
+ * the periodic interval this runs on already rides out transient blips.
+ * @returns {Promise<boolean>}
+ */
+function checkConnectivity() {
+  if (!getLanIp()) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: config.network.PROBE_HOST, port: config.network.PROBE_PORT });
+    let settled = false;
+    const finish = (online) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(online);
+    };
+    socket.setTimeout(config.network.PROBE_TIMEOUT_MS);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
+/**
+ * Clear network-error bookkeeping without restoring anything, so a manual
+ * action (or the overlay) can safely take over the matrix.
+ * @returns {void}
+ */
+function cancelNetworkError() {
+  if (!networkErrorActive) return;
+  networkErrorActive = false;
+  preNetworkErrorState = null;
+}
+
+/**
+ * Runs on config.network.CHECK_INTERVAL_MS. On the offline transition, snapshots
+ * whatever was showing and starts the error scroll (cancelling any pending
+ * overlay revert so it can't later clobber the error message). On the online
+ * transition, restores exactly what was showing before.
+ * @returns {Promise<void>}
+ */
+async function handleNetworkCheck() {
+  const online = await checkConnectivity();
+
+  if (!online && !networkErrorActive) {
+    console.warn("[Network] connectivity lost — showing error on matrix");
+    // If an S2/S3 overlay is mid-flight, its pending preOverlayState holds the
+    // TRUE pre-overlay state — live displayState/ambientState were already
+    // mutated (ambient stopped) when the overlay started, so re-deriving from
+    // live state here would silently lose "ambient was running" information.
+    preNetworkErrorState = overlayRevertTimer ? preOverlayState : captureDisplaySnapshot();
+    cancelOverlayRevert(); // its timer must never fire later and clobber the error
+    networkErrorActive = true;
+    if (ambientState.active) {
+      ambient.stop();
+      ambientState = { ...ambientState, active: false, startedAt: null };
+      saveDisplayState(displayState, displaySettings, ambientState);
+    }
+    display.startScroll(config.network.ERROR_MESSAGE, displaySettings);
+  } else if (online && networkErrorActive) {
+    console.log("[Network] connectivity restored — resuming previous display");
+    networkErrorActive = false;
+    restoreDisplaySnapshot(preNetworkErrorState);
+    preNetworkErrorState = null;
+  }
+}
 
 // ─── Restore display state from before the last restart ───────────────────────
 
@@ -464,10 +568,13 @@ if (ambientState.active) {
 
 refreshWifiCredentials();
 
+handleNetworkCheck(); // initial check — don't wait a full interval to detect a boot with no network
+networkCheckTimer = setInterval(handleNetworkCheck, config.network.CHECK_INTERVAL_MS);
+
 // ─── Cleanup on exit ──────────────────────────────────────────────────────────
 
-process.on("SIGINT",  () => { display.stop(); ambient.stop(); keypad.stop(); process.exit(0); });
-process.on("SIGTERM", () => { display.stop(); ambient.stop(); keypad.stop(); process.exit(0); });
+process.on("SIGINT",  () => { clearInterval(networkCheckTimer); display.stop(); ambient.stop(); keypad.stop(); process.exit(0); });
+process.on("SIGTERM", () => { clearInterval(networkCheckTimer); display.stop(); ambient.stop(); keypad.stop(); process.exit(0); });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 

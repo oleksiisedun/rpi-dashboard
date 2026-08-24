@@ -45,6 +45,14 @@ module.exports = {
     DEFAULT_BRIGHTNESS: Number(process.env.AMBIENT_DEFAULT_BRIGHTNESS) || 8,
   },
 
+  network: {
+    CHECK_INTERVAL_MS: Number(process.env.NETWORK_CHECK_INTERVAL_MS) || 30000,
+    PROBE_HOST: process.env.NETWORK_PROBE_HOST || "1.1.1.1",
+    PROBE_PORT: Number(process.env.NETWORK_PROBE_PORT) || 443,
+    PROBE_TIMEOUT_MS: Number(process.env.NETWORK_PROBE_TIMEOUT_MS) || 5000,
+    ERROR_MESSAGE: process.env.NETWORK_ERROR_MESSAGE || "NO NETWORK CONNECTION",
+  },
+
   keypad: {
     TM1638_STB_PIN: requirePin("TM1638_STB_PIN"),
     TM1638_CLK_PIN: requirePin("TM1638_CLK_PIN"),
