@@ -108,6 +108,11 @@ Runs on `:3000`. No test suite or linter is configured in this project.
 - `deploy.js` excludes the whole `tools/` directory — it's dev-only and must never reach the Pi.
 - `drivers/audio.js` requires the `mpg123` system binary on the Pi (`sudo apt install
   mpg123`); if missing, S4/S5/S6 just log a stub line instead of playing anything.
+- `deploy.js` deletes the Pi's entire remote `sounds/` directory (`rm -rf`) before every
+  upload, then re-populates it from the local `sounds/` folder — it's a wipe-and-replace, not
+  a merge. Any `.mp3` files added directly on the Pi (rather than the dev machine) are lost on
+  the next `npm run deploy`. Done because `putDirectory` only adds/overwrites and never
+  deletes, so without this step renamed/removed sound files would pile up as stale cruft.
 - S7's switch is flaky (previously tested as hardware-faulty, which is why its sound-button role
   was reassigned to S5) — try a different press angle if its restart handler doesn't fire.
 - `drivers/button.js`'s button is wired **normally-closed** (connected at rest, open on press) —
