@@ -123,12 +123,12 @@ automatically after `.env`'s `TOTP_SHOW_DURATION_MS`.
 
 Press **S2** — this machine's LAN IP and port (e.g. `192.168.0.141:3000`)
 scrolls on the MAX7219 (using whatever speed/brightness/rotate/direction is
-currently set in the web UI) for `.env`'s `OVERLAY_DURATION_MS`, then the
+currently set in the web UI) for `.env`'s `DISPLAY_OVERLAY_DURATION_MS`, then the
 previous display state (or nothing, if it was stopped) resumes. Useful since
 the Pi uses DHCP and its IP can change between boots.
 
 Press **S3** — the current Wi-Fi network's password scrolls on the MAX7219
-for `.env`'s `OVERLAY_DURATION_MS`, then the previous display state
+for `.env`'s `DISPLAY_OVERLAY_DURATION_MS`, then the previous display state
 resumes, same as S2. Reads the password via
 `sudo nmcli device wifi show-password`, which requires a NOPASSWD sudoers
 rule (see "Auto-start with systemd" below) — without it, the service can
@@ -145,7 +145,11 @@ correctly when you test `mpg123` by hand over SSH but stay silent when
 triggered by the service. `sounds/` is gitignored (see step 5
 above), so each machine keeps its own files — add them on your dev machine
 and push with `npm run deploy` (it's not in `deploy.js`'s exclude list
-either), or copy them directly onto the Pi.
+either), or copy them directly onto the Pi. **Note:** `deploy.js` deletes the
+Pi's entire remote `sounds/` directory before re-uploading it from your dev
+machine, so any files added directly on the Pi will be wiped out by the next
+`npm run deploy` — keep the dev machine's `sounds/` folder as the source of
+truth if you use both methods.
 
 Press **S7** — restarts the `rpi-dashboard` systemd service via
 `sudo systemctl restart rpi-dashboard`, run directly by the keypad process
@@ -282,6 +286,7 @@ rpi-dashboard`, then `sudo systemctl restart avahi-daemon` to broadcast it immed
 | POST | `/api/display` | `{ text, speed?, brightness?, rotate?, direction? }` | Start scroll loop (stops ambient mode if running) |
 | POST | `/api/display/stop` | — | Stop + clear MAX7219 display |
 | GET  | `/api/display/status` | — | Current MAX7219 state |
+| GET  | `/api/custom-symbols` | — | Returns `{ symbols }` — the literal characters in `font.js`'s `CUSTOM` set, for the frontend's symbol picker |
 | POST | `/api/ambient/start` | `{ animation, brightness? }` | Start an ambient animation (stops scroll loop if running) |
 | POST | `/api/ambient/stop` | — | Stop the ambient animation + clear MAX7219 display |
 | GET  | `/api/ambient/status` | — | Current ambient mode state |
@@ -332,6 +337,7 @@ graph TD
 | `drivers/ambient.js` | Generative ambient animations (wave, plasma) — renders via `drivers/display.js`'s SPI frame primitives |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
+| `drivers/button.js` | Standalone normally-closed GPIO push-button driver (independent of the TM1638), wired to mimic the TM1638's S1 |
 | `drivers/audio.js` | `mpg123`-based random sound playback for the S1/S4/S5/S6 buttons, plus `stop()` for stopping playback |
 | `keypad.js` | S1 button → TOTP-on-digits behavior plus a random TOTP sound; S2 button → LAN IP overlay; S3 button → Wi-Fi password overlay; S4/S5/S6 buttons → random sound; S8 button → ambient mode toggle; S7 button → service restart (S2/S3 overlays and the S8 ambient toggle are handled in `server.js`) |
 | `totp.js` | Shared `oathtool` wrapper used by both the API and the keypad |
@@ -349,6 +355,18 @@ detection (it renders through `display.js`'s frame-push primitives rather than
 opening its own SPI handle), so ambient animations get the same stub-mode
 fallback automatically. `drivers/audio.js` follows the same pattern for a missing
 `mpg123` binary.
+
+---
+
+## Developer tools
+
+Two dev-only scripts, excluded from `deploy.js` and not part of the deployed app:
+
+- `npm run glyph-editor` — a browser-based tool for designing/editing the bitmap glyphs in
+  `drivers/font.js` (`tools/glyph-editor/`), served locally with live read/write access to the
+  font file.
+- `npm run pinmap` — a CLI that reads `.env` and prints the RPi 3B 40-pin GPIO map, showing
+  which pins are used by this app's config and which are free (`tools/pinmap/`).
 
 ---
 
