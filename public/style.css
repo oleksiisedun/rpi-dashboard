@@ -154,18 +154,6 @@ input[type=range]::-webkit-slider-thumb {
 }
 
 .ambient-panel { margin-top: 14px; }
-.ambient-anim-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.anim-chip {
-  font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
-  padding: 10px 8px; background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-.anim-chip:hover { border-color: var(--accent); }
-.anim-chip.active {
-  border-color: var(--accent); color: var(--accent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 25%, transparent);
-}
 
 .symbol-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .symbol-chip {

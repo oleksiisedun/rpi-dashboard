@@ -41,8 +41,10 @@ module.exports = {
 
   ambient: {
     TICK_MS: Number(process.env.AMBIENT_TICK_MS) || 80,
-    DEFAULT_ANIMATION: process.env.AMBIENT_DEFAULT_ANIMATION || "wave",
     DEFAULT_BRIGHTNESS: Number(process.env.AMBIENT_DEFAULT_BRIGHTNESS) || 8,
+    DEFAULT_DIRECTION: process.env.AMBIENT_DEFAULT_DIRECTION || "down",
+    DEFAULT_SPEED: Number(process.env.AMBIENT_DEFAULT_SPEED) || 10,
+    DEFAULT_DROP_SIZE: Number(process.env.AMBIENT_DEFAULT_DROP_SIZE) || 3,
   },
 
   network: {

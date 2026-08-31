@@ -80,8 +80,10 @@ let displaySettings = {
 // handling in the /api/display and /api/ambient/* routes below).
 let ambientState = {
   active: false,
-  animation: config.ambient.DEFAULT_ANIMATION,
   brightness: config.ambient.DEFAULT_BRIGHTNESS,
+  direction: config.ambient.DEFAULT_DIRECTION,
+  speed: config.ambient.DEFAULT_SPEED,
+  dropSize: config.ambient.DEFAULT_DROP_SIZE,
   startedAt: null,
 };
 
@@ -211,19 +213,40 @@ app.get("/api/custom-symbols", (req, res) => {
 });
 
 /**
- * POST /api/ambient/start — stop any scrolling text and start an ambient animation.
- * Body: { animation: string (one of ambient.ANIMATIONS), brightness?: number (0-15) }
+ * Extracts the ambient.start() options from an ambient state object.
+ * @param {{brightness: number, direction: string, speed: number, dropSize: number}} state
+ * @returns {{brightness: number, direction: string, speed: number, dropSize: number}}
+ */
+function ambientOptions(state) {
+  return { brightness: state.brightness, direction: state.direction, speed: state.speed, dropSize: state.dropSize };
+}
+
+/**
+ * POST /api/ambient/start — stop any scrolling text and start the digital-rain
+ * ambient animation.
+ * Body: { brightness?: number (0-15), direction?: 'down'|'up', speed?: number (rows/sec), dropSize?: number (trail length in pixels) }
  * @param {express.Request} req
  * @param {express.Response} res
  * @returns {void}
  */
 app.post("/api/ambient/start", (req, res) => {
-  const { animation, brightness = config.ambient.DEFAULT_BRIGHTNESS } = req.body;
-  if (!ambient.ANIMATIONS.includes(animation)) {
-    return res.status(400).json({ error: `animation must be one of: ${ambient.ANIMATIONS.join(", ")}` });
-  }
+  const {
+    brightness = config.ambient.DEFAULT_BRIGHTNESS,
+    direction = config.ambient.DEFAULT_DIRECTION,
+    speed = config.ambient.DEFAULT_SPEED,
+    dropSize = config.ambient.DEFAULT_DROP_SIZE,
+  } = req.body;
   if (typeof brightness !== "number" || brightness < 0 || brightness > 15) {
     return res.status(400).json({ error: "brightness must be a number between 0 and 15." });
+  }
+  if (!ambient.DIRECTIONS.includes(direction)) {
+    return res.status(400).json({ error: `direction must be one of: ${ambient.DIRECTIONS.join(", ")}` });
+  }
+  if (typeof speed !== "number" || speed <= 0 || speed > 30) {
+    return res.status(400).json({ error: "speed must be a number between 0 and 30 (rows/sec)." });
+  }
+  if (typeof dropSize !== "number" || !Number.isInteger(dropSize) || dropSize < 1 || dropSize > 8) {
+    return res.status(400).json({ error: "dropSize must be an integer between 1 and 8." });
   }
 
   cancelOverlayRevert();
@@ -233,13 +256,13 @@ app.post("/api/ambient/start", (req, res) => {
   display.stop();
   displayState = { active: false, text: "", startedAt: null };
 
-  ambientState = { active: true, animation, brightness, startedAt: new Date().toISOString() };
+  ambientState = { active: true, brightness, direction, speed, dropSize, startedAt: new Date().toISOString() };
   saveDisplayState(displayState, displaySettings, ambientState);
 
-  console.log(`[Ambient] Starting animation: ${animation}`);
-  ambient.start(animation, { brightness });
+  console.log(`[Ambient] Starting digital rain: direction=${direction} speed=${speed} dropSize=${dropSize}`);
+  ambient.start(ambientOptions(ambientState));
 
-  res.json({ ok: true, message: `Ambient mode: ${animation}` });
+  res.json({ ok: true, message: `Ambient mode: rain (${direction})` });
 });
 
 /**
@@ -287,40 +310,45 @@ function cancelOverlayRevert() {
 /**
  * Snapshot of displayState/ambientState, used to restore after a temporary
  * interruption (an S2/S3 overlay or a network-error takeover).
- * @returns {{displayActive: boolean, displayText: string, ambientActive: boolean, ambientAnimation: string, ambientBrightness: number}}
+ * @returns {{displayActive: boolean, displayText: string, ambientActive: boolean, ambientBrightness: number, ambientDirection: string, ambientSpeed: number, ambientDropSize: number}}
  */
 function captureDisplaySnapshot() {
   return {
     displayActive: displayState.active,
     displayText: displayState.text,
     ambientActive: ambientState.active,
-    ambientAnimation: ambientState.animation,
     ambientBrightness: ambientState.brightness,
+    ambientDirection: ambientState.direction,
+    ambientSpeed: ambientState.speed,
+    ambientDropSize: ambientState.dropSize,
   };
 }
 
 /**
  * Restore whichever mode a snapshot says was active — resume ambient (with its
- * animation/brightness), resume scrolling text, or stop if neither was active.
+ * brightness/direction/speed/dropSize), resume scrolling text, or stop if
+ * neither was active.
  * @param {ReturnType<typeof captureDisplaySnapshot>|null} snapshot
  * @returns {void}
  */
 function restoreDisplaySnapshot(snapshot) {
   if (!snapshot) return display.stop();
   if (snapshot.ambientActive) {
-    console.log(`[Ambient] Resuming ambient animation: ${snapshot.ambientAnimation}`);
+    console.log("[Ambient] Resuming ambient mode");
     // The interrupting scroll loop (display.js's own timer) is still running at
     // this point — ambient.start() only clears ambient's timer, not display's,
     // so it must be stopped explicitly or both loops render concurrently.
     display.stop();
     ambientState = {
       active: true,
-      animation: snapshot.ambientAnimation,
       brightness: snapshot.ambientBrightness,
+      direction: snapshot.ambientDirection,
+      speed: snapshot.ambientSpeed,
+      dropSize: snapshot.ambientDropSize,
       startedAt: new Date().toISOString(),
     };
     saveDisplayState(displayState, displaySettings, ambientState);
-    ambient.start(snapshot.ambientAnimation, { brightness: snapshot.ambientBrightness });
+    ambient.start(ambientOptions(ambientState));
   } else if (snapshot.displayActive) {
     display.startScroll(snapshot.displayText, displaySettings);
   } else {
@@ -461,11 +489,11 @@ function handleS8Press() {
     ambient.stop();
     ambientState = { ...ambientState, active: false, startedAt: null };
   } else {
-    console.log(`[Ambient] S8 pressed — starting ambient mode: ${ambientState.animation}`);
+    console.log("[Ambient] S8 pressed — starting ambient mode");
     display.stop();
     displayState = { active: false, text: "", startedAt: null };
     ambientState = { ...ambientState, active: true, startedAt: new Date().toISOString() };
-    ambient.start(ambientState.animation, { brightness: ambientState.brightness });
+    ambient.start(ambientOptions(ambientState));
   }
 
   saveDisplayState(displayState, displaySettings, ambientState);
@@ -549,18 +577,26 @@ async function handleNetworkCheck() {
 
 // ─── Restore display state from before the last restart ───────────────────────
 
-// A persisted animation name can go stale across a deploy that renames/removes
-// animations (the state file survives deploys — see config.js's deploy exclusions).
-// Sanitize before restoring so a stale name can't crash startup.
-if (ambientState.active && !ambient.ANIMATIONS.includes(ambientState.animation)) {
-  console.warn(`[Ambient] Persisted animation "${ambientState.animation}" no longer exists — clearing instead of restoring.`);
-  ambientState = { ...ambientState, active: false, startedAt: null };
-  saveDisplayState(displayState, displaySettings, ambientState);
+// A persisted direction/speed/dropSize can be stale/invalid (the state file
+// survives deploys — see config.js's deploy exclusions, and these fields don't
+// exist in a state file written before this feature existed). Sanitize before
+// restoring rather than trusting it blindly.
+if (ambientState.active) {
+  const sane = {
+    direction: ambient.DIRECTIONS.includes(ambientState.direction) ? ambientState.direction : config.ambient.DEFAULT_DIRECTION,
+    speed: typeof ambientState.speed === "number" && ambientState.speed > 0 ? ambientState.speed : config.ambient.DEFAULT_SPEED,
+    dropSize: Number.isInteger(ambientState.dropSize) && ambientState.dropSize >= 1 ? ambientState.dropSize : config.ambient.DEFAULT_DROP_SIZE,
+  };
+  if (sane.direction !== ambientState.direction || sane.speed !== ambientState.speed || sane.dropSize !== ambientState.dropSize) {
+    console.warn("[Ambient] Persisted direction/speed/dropSize invalid or missing — falling back to defaults where needed.");
+    ambientState = { ...ambientState, ...sane };
+    saveDisplayState(displayState, displaySettings, ambientState);
+  }
 }
 
 if (ambientState.active) {
-  console.log(`[Ambient] Restoring ambient animation: ${ambientState.animation}`);
-  ambient.start(ambientState.animation, { brightness: ambientState.brightness });
+  console.log(`[Ambient] Restoring ambient mode: direction=${ambientState.direction} speed=${ambientState.speed} dropSize=${ambientState.dropSize}`);
+  ambient.start(ambientOptions(ambientState));
 } else if (displayState.active) {
   console.log(`[Display] Restoring previous display: "${displayState.text}"`);
   display.startScroll(displayState.text, displaySettings);

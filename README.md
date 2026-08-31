@@ -157,10 +157,11 @@ with no interactive stdin. This requires a NOPASSWD sudoers rule (see
 "Auto-start with systemd" below) — without it, the restart silently fails and
 an error is logged. S7's switch is flaky — try a different press angle.
 
-Press **S8** — toggles ambient mode on the MAX7219 on/off: if ambient mode is
-running it stops it, otherwise it starts it (reusing whichever animation and
-brightness were last active/configured) and stops any scrolling text first,
-the same mutual-exclusion behavior as the `/api/ambient/start` web UI route.
+Press **S8** — toggles ambient mode (digital rain) on the MAX7219 on/off: if
+ambient mode is running it stops it, otherwise it starts it (reusing whichever
+direction/speed/drop-size/brightness were last active/configured) and stops
+any scrolling text first, the same mutual-exclusion behavior as the
+`/api/ambient/start` web UI route.
 Handled entirely in `server.js` (not `drivers/audio.js`), so no sudoers rule
 is needed.
 
@@ -287,19 +288,22 @@ rpi-dashboard`, then `sudo systemctl restart avahi-daemon` to broadcast it immed
 | POST | `/api/display/stop` | — | Stop + clear MAX7219 display |
 | GET  | `/api/display/status` | — | Current MAX7219 state |
 | GET  | `/api/custom-symbols` | — | Returns `{ symbols }` — the literal characters in `font.js`'s `CUSTOM` set, for the frontend's symbol picker |
-| POST | `/api/ambient/start` | `{ animation, brightness? }` | Start an ambient animation (stops scroll loop if running) |
+| POST | `/api/ambient/start` | `{ brightness?, direction?, speed?, dropSize? }` | Start the digital-rain ambient animation (stops scroll loop if running) |
 | POST | `/api/ambient/stop` | — | Stop the ambient animation + clear MAX7219 display |
 | GET  | `/api/ambient/status` | — | Current ambient mode state |
 
-`speed` = ms per column shift (default 40). `brightness` = 0–15 (default 5).
-`direction` = `'rtl'` (default) or `'ltr'`.
-`animation` = one of `'wave'`, `'plasma'`.
+`speed` (for `/api/display`) = ms per column shift (default 40). `brightness` = 0–15 (default 5).
+`direction` (for `/api/display`) = `'rtl'` (default) or `'ltr'`.
+
+Ambient mode is always the digital-rain animation. `direction` = `'down'` (default) or `'up'`.
+`speed` = rows/sec the drops fall at, 1–30 (default 10). `dropSize` = trail length in pixels, 1–8
+(default 3).
 
 ---
 
 ## Architecture
 
-`server.js` is the central hub: it exposes the HTTP API consumed by the browser frontend and registers S2/S3 overlay callbacks on `keypad.js`. `keypad.js` runs its own polling loop against `drivers/tm1638.js` and dispatches button presses to `totp.js`, `drivers/audio.js`, or back to `server.js` via those callbacks. Both `server.js` and `keypad.js` share the `totp.js` `oathtool` wrapper; `server.js` drives `drivers/display.js`, which reads glyph bitmaps from `drivers/font.js` before writing scroll frames over SPI. `server.js` also drives `drivers/ambient.js` for generative ambient animations, which shares the same SPI frame-push primitives from `drivers/display.js` rather than talking to the hardware directly — the two are mutually exclusive, and `server.js` enforces that by stopping one before starting the other. `server.js` also runs its own periodic connectivity check (Node's built-in `net` module, no driver involved) that takes over `drivers/display.js` with an error message while offline. All tunable values are read from `.env` via `config.js`.
+`server.js` is the central hub: it exposes the HTTP API consumed by the browser frontend and registers S2/S3 overlay callbacks on `keypad.js`. `keypad.js` runs its own polling loop against `drivers/tm1638.js` and dispatches button presses to `totp.js`, `drivers/audio.js`, or back to `server.js` via those callbacks. Both `server.js` and `keypad.js` share the `totp.js` `oathtool` wrapper; `server.js` drives `drivers/display.js`, which reads glyph bitmaps from `drivers/font.js` before writing scroll frames over SPI. `server.js` also drives `drivers/ambient.js` for the digital-rain ambient animation, which shares the same SPI frame-push primitives from `drivers/display.js` rather than talking to the hardware directly — the two are mutually exclusive, and `server.js` enforces that by stopping one before starting the other. `server.js` also runs its own periodic connectivity check (Node's built-in `net` module, no driver involved) that takes over `drivers/display.js` with an error message while offline. All tunable values are read from `.env` via `config.js`.
 
 ```mermaid
 graph TD
@@ -334,7 +338,7 @@ graph TD
 |---|---|
 | `server.js` | Express app, HTTP routes, and a periodic connectivity check that shows a matrix error while offline |
 | `drivers/display.js` | MAX7219 driver (SPI, scrolling) |
-| `drivers/ambient.js` | Generative ambient animations (wave, plasma) — renders via `drivers/display.js`'s SPI frame primitives |
+| `drivers/ambient.js` | Digital-rain ambient animation (direction/speed/drop-size configurable) — renders via `drivers/display.js`'s SPI frame primitives |
 | `drivers/font.js` | Bitmap font data — Latin + Ukrainian Cyrillic |
 | `drivers/tm1638.js` | Low-level TM1638 bit-banged GPIO driver |
 | `drivers/button.js` | Standalone normally-closed GPIO push-button driver (independent of the TM1638), wired to mimic the TM1638's S1 |

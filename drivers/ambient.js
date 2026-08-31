@@ -1,10 +1,11 @@
 "use strict";
 
 /**
- * ambient.js — generative ambient animations for the MAX7219 matrix.
+ * ambient.js — "digital rain" ambient animation for the MAX7219 matrix.
  *
  * The MAX7219 has no per-pixel PWM: only on/off per pixel plus one global
- * INTENSITY register (0-15). Every animation below works within that limit.
+ * INTENSITY register (0-15), so a fade is faked with a fixed-length streak of
+ * lit pixels trailing each drop's head instead of a true brightness gradient.
  *
  * Same flat-module, recursive-setTimeout shape as display.js's scroll loop.
  */
@@ -16,90 +17,63 @@ const NUM_MODULES = config.display.NUM_MODULES;
 const WIDTH = NUM_MODULES * 8; // 32 columns
 const HEIGHT = 8; // 8 rows
 
-const CX = (WIDTH - 1) / 2;
-const CY = (HEIGHT - 1) / 2;
-
-// ─── wave: a sine ripple flowing across the columns ────────────────────────────
+const DIRECTIONS = ["down", "up"];
 
 /**
- * @param {{brightness: number}} opts
- * @returns {{brightness: number}}
+ * @param {boolean} staggered - true to start already mid-fall at a random offset
+ *   (used at init, so drops aren't all born at the same instant); false to
+ *   start just off-screen (used on reset, once the rain is already flowing)
+ * @param {number} speed - rows/sec, used as the midpoint for this drop's jitter
+ * @param {number} dropSize - trail length in pixels
+ * @returns {{head: number, speed: number}}
  */
-function waveInit({ brightness }) {
-  return { brightness };
+function _newDrop(staggered, speed, dropSize) {
+  return {
+    head: staggered ? -Math.random() * (HEIGHT + dropSize) * 3 : -Math.random() * HEIGHT,
+    speed: speed * (0.7 + Math.random() * 0.6),
+  };
 }
 
 /**
- * @param {{brightness: number}} state
- * @param {number} t - seconds elapsed
+ * @param {{brightness: number, direction: string, speed: number, dropSize: number}} opts
+ * @returns {{brightness: number, direction: string, speed: number, dropSize: number, cols: {head: number, speed: number}[]}}
+ */
+function _init({ brightness, direction, speed, dropSize }) {
+  const cols = [];
+  for (let x = 0; x < WIDTH; x++) cols.push(_newDrop(true, speed, dropSize));
+  return { brightness, direction, speed, dropSize, cols };
+}
+
+/**
+ * @param {ReturnType<typeof _init>} state
  * @returns {{frame: number[], brightness: number}}
  */
-function waveTick(state, t) {
-  const amp = 2.5;
-  const wavelength = 14;
-  const speed = 2.0;
-  const amp2 = 0.6;
+function _renderFrame(state) {
+  const { direction, dropSize, speed } = state;
+  const dt = config.ambient.TICK_MS / 1000;
   const frame = new Array(WIDTH).fill(0);
   for (let x = 0; x < WIDTH; x++) {
-    let yCenter = CY + amp * Math.sin((2 * Math.PI * x) / wavelength + t * speed);
-    yCenter += amp2 * Math.sin((4 * Math.PI * x) / wavelength - t * speed * 1.7);
-    const yFloor = Math.floor(yCenter);
+    const drop = state.cols[x];
+    drop.head += drop.speed * dt;
+    if (drop.head - dropSize > HEIGHT) {
+      state.cols[x] = _newDrop(false, speed, dropSize);
+      continue;
+    }
     let byte = 0;
-    if (yFloor >= 0 && yFloor < HEIGHT) byte |= 1 << yFloor;
-    if (yFloor + 1 >= 0 && yFloor + 1 < HEIGHT) byte |= 1 << (yFloor + 1);
-    frame[x] = byte;
-  }
-  return { frame, brightness: state.brightness };
-}
-
-// ─── plasma: rotating spiral via polar sine field, thresholded on/off ─────────
-
-/**
- * @param {{brightness: number}} opts
- * @returns {{brightness: number}}
- */
-function plasmaInit({ brightness }) {
-  return { brightness };
-}
-
-/**
- * @param {{brightness: number}} state
- * @param {number} t - seconds elapsed
- * @returns {{frame: number[], brightness: number}}
- */
-function plasmaTick(state, t) {
-  const armCount = 3;
-  const tightness = 0.35;
-  const rotationSpeed = 1.5;
-  const frame = new Array(WIDTH).fill(0);
-  for (let x = 0; x < WIDTH; x++) {
-    const dx = x - CX;
-    let byte = 0;
-    for (let y = 0; y < HEIGHT; y++) {
-      const dy = (y - CY) * 4; // corrects for the 32:8 aspect ratio so radius reads round
-      const angle = Math.atan2(dy, dx);
-      const radius = Math.sqrt(dx * dx + dy * dy);
-      const value = Math.sin(angle * armCount + radius * tightness - t * rotationSpeed);
-      if (value > 0) byte |= 1 << y;
+    for (let i = 0; i < dropSize; i++) {
+      const progress = Math.floor(drop.head) - i;
+      const y = direction === "up" ? HEIGHT - 1 - progress : progress;
+      if (y >= 0 && y < HEIGHT) byte |= 1 << y;
     }
     frame[x] = byte;
   }
   return { frame, brightness: state.brightness };
 }
 
-// ─── registry + tick loop ──────────────────────────────────────────────────────
-
-const ANIMATION_DEFS = {
-  wave: { init: waveInit, tick: waveTick },
-  plasma: { init: plasmaInit, tick: plasmaTick },
-};
-
-const ANIMATIONS = Object.keys(ANIMATION_DEFS);
+// ─── tick loop ──────────────────────────────────────────────────────────────
 
 let _timer = null;
-let _animDef = null;
-let _animState = null;
-let _startTime = null;
+let _state = null;
 let _lastFrame = null;
 let _lastBrightness = null;
 
@@ -108,8 +82,7 @@ let _lastBrightness = null;
  * @returns {void}
  */
 function _tick() {
-  const t = (Date.now() - _startTime) / 1000;
-  const { frame, brightness } = _animDef.tick(_animState, t);
+  const { frame, brightness } = _renderFrame(_state);
 
   if (frame !== _lastFrame) {
     display.pushFrame(frame, 0);
@@ -124,20 +97,25 @@ function _tick() {
 }
 
 /**
- * Start (or restart) an ambient animation.
- * @param {string} name - one of ANIMATIONS
- * @param {{brightness?: number}} [options]
+ * Start (or restart) the digital rain animation.
+ * @param {{brightness?: number, direction?: 'down'|'up', speed?: number, dropSize?: number}} [options]
+ *   speed is in rows/sec, dropSize is the trail length in pixels.
  * @returns {void}
  */
-function start(name, { brightness = config.ambient.DEFAULT_BRIGHTNESS } = {}) {
-  const animDef = ANIMATION_DEFS[name];
-  if (!animDef) throw new Error(`Unknown ambient animation: ${name}`);
-
+function start({
+  brightness = config.ambient.DEFAULT_BRIGHTNESS,
+  direction = config.ambient.DEFAULT_DIRECTION,
+  speed = config.ambient.DEFAULT_SPEED,
+  dropSize = config.ambient.DEFAULT_DROP_SIZE,
+} = {}) {
   stop();
 
-  _animDef = animDef;
-  _animState = animDef.init({ brightness });
-  _startTime = Date.now();
+  _state = _init({
+    brightness,
+    direction: DIRECTIONS.includes(direction) ? direction : config.ambient.DEFAULT_DIRECTION,
+    speed,
+    dropSize,
+  });
   _lastFrame = null;
   _lastBrightness = null;
 
@@ -160,4 +138,4 @@ function stop() {
   display.clearHardware();
 }
 
-module.exports = { start, stop, ANIMATIONS, available: display.available };
+module.exports = { start, stop, DIRECTIONS, available: display.available };

@@ -83,17 +83,36 @@
         </div>
 
         <div class="ambient-panel" id="ambientPanel" hidden>
-          <div class="field-label">Animation</div>
-          <div class="ambient-anim-row">
-            <button type="button" class="anim-chip" data-anim="wave">Wave / Ripple</button>
-            <button type="button" class="anim-chip" data-anim="plasma">Spiral / Plasma</button>
+          <div class="field-label">Digital Rain</div>
+
+          <div class="controls-row">
+            <div class="control-group">
+              <label>Speed <span id="ambientSpeedVal">10 rows/s</span></label>
+              <input type="range" id="ambientSpeedSlider" min="1" max="30" value="10"
+                     oninput="document.getElementById('ambientSpeedVal').textContent = this.value + ' rows/s'"
+                     onchange="onAmbientControlChange()">
+            </div>
+            <div class="control-group">
+              <label>Drop size <span id="ambientDropSizeVal">3 px</span></label>
+              <input type="range" id="ambientDropSizeSlider" min="1" max="8" value="3"
+                     oninput="document.getElementById('ambientDropSizeVal').textContent = this.value + ' px'"
+                     onchange="onAmbientControlChange()">
+            </div>
+          </div>
+
+          <div class="rotate-row">
+            <label class="rotate-label">
+              <input type="checkbox" id="ambientDirCheck" onchange="onAmbientControlChange()">
+              <span class="rotate-box">↑</span>
+              Reverse direction
+            </label>
           </div>
 
           <div class="control-group" style="margin-top:14px;">
             <label>Brightness <span id="ambientBrightVal">8 / 15</span></label>
             <input type="range" id="ambientBrightSlider" min="0" max="15" value="8"
                    oninput="document.getElementById('ambientBrightVal').textContent = this.value + ' / 15'"
-                   onchange="onAmbientBrightnessChange()">
+                   onchange="onAmbientControlChange()">
           </div>
         </div>
 
@@ -183,8 +202,6 @@
     document.getElementById('statusDot').className = 'status-dot' + (active ? ' active' : '');
   }
 
-  let ambientAnimation = 'wave';
-
   function setScrollControlsHidden(hide) {
     document.getElementById('scrollControls').hidden = hide;
     // Leaving ambient mode never leaves scrolling text active (mutual exclusion is
@@ -197,30 +214,31 @@
     const on = document.getElementById('ambientToggle').checked;
     document.getElementById('ambientPanel').hidden = !on;
     setScrollControlsHidden(on);
-    if (on) await startAmbient(ambientAnimation);
+    if (on) await startAmbient();
     else    await stopAmbient();
   }
 
-  async function startAmbient(animation) {
-    ambientAnimation = animation;
-    highlightAnimChip(animation);
+  async function startAmbient() {
     const brightness = parseInt(document.getElementById('ambientBrightSlider').value);
+    const speed      = parseInt(document.getElementById('ambientSpeedSlider').value);
+    const dropSize   = parseInt(document.getElementById('ambientDropSizeSlider').value);
+    const direction  = document.getElementById('ambientDirCheck').checked ? 'up' : 'down';
     try {
       const res  = await fetch('/api/ambient/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ animation, brightness }),
+        body: JSON.stringify({ brightness, speed, dropSize, direction }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Server error');
-      setStatus(`Ambient: ${animation} running`, true);
+      setStatus(`Ambient: rain (${direction}) running`, true);
     } catch (err) {
       setStatus(`Error: ${err.message}`, false);
     }
   }
 
-  async function onAmbientBrightnessChange() {
-    if (document.getElementById('ambientToggle').checked) await startAmbient(ambientAnimation);
+  async function onAmbientControlChange() {
+    if (document.getElementById('ambientToggle').checked) await startAmbient();
   }
 
   async function stopAmbient() {
@@ -231,14 +249,6 @@
       setStatus(`Error: ${err.message}`, false);
     }
   }
-
-  function highlightAnimChip(name) {
-    document.querySelectorAll('.anim-chip').forEach(c => c.classList.toggle('active', c.dataset.anim === name));
-  }
-
-  document.querySelectorAll('.anim-chip').forEach(chip => {
-    chip.onclick = () => startAmbient(chip.dataset.anim);
-  });
 
   function insertSymbol(sym) {
     const ta    = document.getElementById('displayText');
@@ -275,12 +285,20 @@
         document.getElementById('ambientToggle').checked = true;
         document.getElementById('ambientPanel').hidden = false;
         setScrollControlsHidden(true);
-        highlightAnimChip(ambientData.animation);
         if (ambientData.brightness !== undefined) {
           document.getElementById('ambientBrightSlider').value = ambientData.brightness;
           document.getElementById('ambientBrightVal').textContent = ambientData.brightness + ' / 15';
         }
-        setStatus(`Ambient: ${ambientData.animation} running`, true);
+        if (ambientData.speed !== undefined) {
+          document.getElementById('ambientSpeedSlider').value = ambientData.speed;
+          document.getElementById('ambientSpeedVal').textContent = ambientData.speed + ' rows/s';
+        }
+        if (ambientData.dropSize !== undefined) {
+          document.getElementById('ambientDropSizeSlider').value = ambientData.dropSize;
+          document.getElementById('ambientDropSizeVal').textContent = ambientData.dropSize + ' px';
+        }
+        if (ambientData.direction === 'up') document.getElementById('ambientDirCheck').checked = true;
+        setStatus(`Ambient: rain (${ambientData.direction || 'down'}) running`, true);
         return;
       }
     } catch (_) {}

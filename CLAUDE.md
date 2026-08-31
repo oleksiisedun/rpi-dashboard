@@ -2,8 +2,8 @@
 
 A small Node/Express app that turns a Raspberry Pi into a local network dashboard with three
 subsystems: TOTP 2FA code generation (via `oathtool`), a MAX7219 LED matrix scrolling-text
-display (SPI) that can also run a web-UI-only ambient mode (two generative animations —
-wave/ripple, spiral/plasma — mutually exclusive with scrolling text),
+display (SPI) that can also run a web-UI-only ambient mode (a configurable digital-rain
+animation — direction, speed, drop size — mutually exclusive with scrolling text),
 and a TM1638 LED&KEY keypad (bit-banged GPIO) whose S1 button shows the TOTP
 code on the 7-segment digits and plays a random sound from `sounds/TOTP/` — as does a
 standalone normally-closed push-button wired directly
@@ -29,7 +29,7 @@ setup steps live in `README.md`; this file is about the code.
 | `.env.deploy` | Deploy credentials — `PI_HOST`, `PI_USER`, `PI_PASSWORD`, `PI_PATH`. Dev-only; gitignored and excluded from `deploy.js` so it never reaches the Pi. Copy from `.env.deploy.example` |
 | `server.js` | Loads `.env` into `process.env` via `require("dotenv").config()` as its first line (so `config.js`'s reads are populated regardless of how the process was started — systemd unit, `npm start`, or a bare shell), then the Express app, all HTTP routes, in-memory `displayState`/`displaySettings`/`ambientState` (persisted to `.display-state.json` and restored on boot — ambient wins if both were somehow active), a periodic network-connectivity monitor that takes over the MAX7219 with an error message while offline (see "Known constraints" below), SIGINT/SIGTERM cleanup |
 | `drivers/display.js` | MAX7219 SPI driver: scroll-buffer builder, frame renderer, scroll loop. Exports `pushFrame`/`setBrightness`/`clearHardware` (aliases of its private `_pushFrame`/`_setBrightness`/`_clearHardware`) so `drivers/ambient.js` can render through the same SPI primitives without opening its own hardware handle |
-| `drivers/ambient.js` | Generative ambient animations for the MAX7219 — `wave`/`plasma`, each an `init()`/`tick(state, t)` pair producing a 32-byte column-frame + brightness value. Runs its own recursive-`setTimeout` loop (same shape as `display.js`'s scroll loop) at `config.ambient.TICK_MS`, rendering via `drivers/display.js`'s exported primitives. Mutually exclusive with `startScroll` — enforced by `server.js`, not by this module |
+| `drivers/ambient.js` | Digital-rain ambient animation for the MAX7219 — each of the 32 columns tracks an independent falling drop (head position + speed), mutated in place every tick rather than derived as a pure function of elapsed time, since a column needs to reset to a new random speed/offset once its drop falls off the bottom. `start({brightness, direction, speed, dropSize})` takes the drop-fall direction (`'down'`/`'up'`, exported as `DIRECTIONS`), speed in rows/sec, and trail length in pixels. Runs its own recursive-`setTimeout` loop (same shape as `display.js`'s scroll loop) at `config.ambient.TICK_MS`, rendering via `drivers/display.js`'s exported primitives. Mutually exclusive with `startScroll` — enforced by `server.js`, not by this module |
 | `drivers/font.js` | Bitmap font data (Latin + Ukrainian Cyrillic) consumed by `drivers/display.js`; its `CUSTOM` export is also read directly by `server.js` for the `/api/custom-symbols` route |
 | `drivers/tm1638.js` | `TM1638` class — low-level bit-banged GPIO protocol (write/read byte, commands) |
 | `drivers/audio.js` | `mpg123` wrapper: probes for the binary at load (hardware-detection pattern), `playRandom(folder)` picks and spawns a random `.mp3`, `stop()` kills whatever is currently playing/queued |
@@ -87,7 +87,7 @@ Runs on `:3000`. No test suite or linter is configured in this project.
 | POST | `/api/display/stop` | — | Stop + clear MAX7219 display |
 | GET  | `/api/display/status` | — | Current MAX7219 state |
 | GET  | `/api/custom-symbols` | — | Returns `{ symbols }` — the literal characters in `font.js`'s `CUSTOM` set, for the frontend's symbol picker |
-| POST | `/api/ambient/start` | `{ animation, brightness? }` | Start an ambient animation — `animation` ∈ `ambient.ANIMATIONS` (`wave`/`plasma`) — stops scroll mode first |
+| POST | `/api/ambient/start` | `{ brightness?, direction?, speed?, dropSize? }` | Start the digital-rain ambient animation — `direction` ∈ `ambient.DIRECTIONS` (`down`/`up`), `speed` in rows/sec, `dropSize` trail length in pixels — stops scroll mode first |
 | POST | `/api/ambient/stop` | — | Stop + clear the ambient animation |
 | GET  | `/api/ambient/status` | — | Current ambient state |
 
@@ -170,14 +170,14 @@ Runs on `:3000`. No test suite or linter is configured in this project.
   consecutive-failure hysteresis — a single probe every `CHECK_INTERVAL_MS` already rides out
   transient blips.
 - The MAX7219 has no per-pixel PWM — only on/off per pixel plus one global `INTENSITY` register
-  (0-15). `drivers/ambient.js`'s animations (`wave`/`plasma`) render at a constant brightness and
-  vary which pixels are lit instead; a brightness-based effect would need to modulate
-  `INTENSITY` over time via `display.setBrightness()`.
+  (0-15). `drivers/ambient.js`'s rain animation renders at a constant brightness and fakes a
+  fade with a fixed-length streak of lit pixels trailing each drop's head instead; a true
+  brightness-based fade would need to modulate `INTENSITY` over time via `display.setBrightness()`,
+  which isn't per-pixel so can't vary within a single frame.
 - `.display-state.json` is excluded from `deploy.js` and survives across deploys untouched (see
-  its file-map entry above), so a persisted `ambientState.animation` can reference a name that a
-  later deploy renamed or removed. `server.js`'s boot-restore block validates
-  `ambientState.animation` against `ambient.ANIMATIONS` and clears the persisted state (rather
-  than restoring it) if the name is unknown, instead of letting `ambient.start()` throw — an
-  uncaught throw there happens before `app.listen()`, which crashes the whole process, not just
-  ambient mode. Any future rename/removal of an animation id must keep going through this same
-  validated path.
+  its file-map entry above), so a persisted `ambientState.direction`/`speed`/`dropSize` can be
+  stale or (for a state file written before this feature existed) simply missing.
+  `server.js`'s boot-restore block sanitizes each field against `ambient.DIRECTIONS`/basic type
+  checks and falls back to `config.ambient` defaults for anything invalid, rather than trusting
+  the persisted value or letting a bad value reach `ambient.start()` uncaught — an uncaught throw
+  there happens before `app.listen()`, which crashes the whole process, not just ambient mode.
